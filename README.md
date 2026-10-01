@@ -9,19 +9,65 @@
 - 后端：Cloudflare Pages Functions（`functions/` 目录）
 - 数据库：Cloudflare D1（Serverless SQLite）
 
+## 功能特性
+
+- **界面：极简玻璃拟态（Minimal Glassmorphism）**——深空极光底色 + 毛玻璃面板 + 克制留白，全站暗色，纯 CSS 手写，无 UI 框架、无外部字体/CDN。见下文「界面与动效」。
+- **单选 / 多选** 题型，题目带题型徽标与进度条；**单选选中后自动跳到下一题**（多选与“其他”需手动点“下一题”）。
+- **「其他」自定义输入**：选项含“其他”时，可直接在横线处填写自己的答案（作为 `userText` 提交回显，不参与计分）。
+- **反作弊（惩罚模式）**：后端依据「连续同选（straight-line）」与「作答过快」两个信号判定异常作答，命中则结果页显示惩罚提示，需点「我偏要看真实结果」才解锁分析。
+- **结果页（借鉴 femboy 模式，更详细）**：
+  - 匹配度圆环（SVG）+ 称号大标题（**90%+ → “可以跟作者配了 💍”**）；
+  - 四格汇总卡（匹配度 / 等级称号 / 最强同频 / 最离谱分歧）；
+  - **多维同频雷达图**（纯 SVG 手绘，零依赖）；
+  - **各维度同频度** 进度条 + 趣味评语；
+  - **专属深度报告**（共同点 / 最离谱分歧 / 终极结论）；
+  - 最一致 / 分歧最大的 3 题；
+  - **保存结果长图**（html2canvas，**已本地化到 `vendor/`**，不外链 CDN）；
+  - **一键复制结果文案**（原生 `navigator.clipboard`）。
+- **全网平均分对比**：每次提交都会入库（命中反作弊的记录不计入），结果页展示「你 vs 全网平均」双条对比、差值徽标与「击败了 X% 的参与者」；开始页也会显示参与人次与平均分。
+- **文案偏搞笑风**，等级称号与评语均为段子向。
+
+## 界面与动效
+
+设计语言：**极简玻璃拟态**（暗色）。所有视觉均来自 `styles.css`，通过 CSS 变量集中控制：
+
+| 变量 | 作用 |
+|---|---|
+| `--glass` / `--glass-2` / `--glass-3` | 三级玻璃透明度（面板 / 次级 / 内嵌块） |
+| `--brd` / `--brd-hi` | 玻璃描边（常态 / 悬停高亮） |
+| `--blur` | `backdrop-filter` 模糊半径 |
+| `--a1` `--a2` `--a3` | 强调色（靛 → 紫 → 青），用于渐变文字/按钮/进度条 |
+| `--ease` / `--ease-soft` / `--snap` | 三档缓动曲线 |
+
+**动效清单**（均可用 `prefers-reduced-motion` 一键关闭）：
+
+- 背景：三团极光光晕缓慢漂移（34–50s 交替），叠加内联 SVG 噪点提升质感；
+- 屏幕切换：淡入 + 上浮 + 轻微去模糊（`screen-in`）；
+- 开始页：标题/正文/芯片/按钮/脚注逐级错峰上浮；渐变标题色相缓慢流动；按钮悬停扫光；
+- 答题页：选项逐条错峰入场、悬停右移、选中时左侧强调条弹出 + 圆点发光；进度条带流光 sheen；换题时题干重放动效；
+- 结果页：分数环「从 0 画到 N」的 `stroke-dashoffset` 动画、分数数字 rAF 滚动、雷达图整体缩放生长（轴标签随生长淡入）、维度进度条错峰生长、汇总卡与各区块逐级入场；
+- 反馈：错误提示从底部滑入。
+
+**截图导出兼容**：`html2canvas` 不支持 `backdrop-filter`，因此长图导出时给 `#result-screen` 加 `.capturing` 类，临时提高玻璃不透明度、改为纯色深底 `#0a0c16` 并停掉所有动画，保证导出的 PNG 与屏幕观感一致（`script.js` 中 `downloadResult()` 的 `backgroundColor` 需与此一致）。
+
 ## 目录结构
 
 ```
 matching-quiz/
 ├── index.html              # 前端页面（开始 / 答题 / 结果 三个视图）
-├── styles.css              # 样式（玻璃拟态卡片，无外部依赖）
-├── script.js               # 前端逻辑（不出现任何作者答案，支持单选/多选）
+├── styles.css              # 极简玻璃拟态样式 + 全套动效（无外部依赖）
+├── script.js               # 前端逻辑（无作者答案；“其他”输入、单选自动跳题、多维雷达、维度剖析、深度报告、反作弊、长图导出、动效钩子）
+├── vendor/
+│   └── html2canvas.min.js  # 本地化的 html2canvas（用于“保存结果长图”，不外链 CDN）
 ├── functions/
 │   └── api/
 │       ├── questions.js    # GET  /api/questions  返回题目（id/text/type/options）
-│       ├── submit.js       # POST /api/submit    接收字母组合答案、计算分数
+│       ├── submit.js       # POST /api/submit    接收字母组合答案、计算分数、记录并统计平均分
+│       ├── stats.js        # GET  /api/stats     返回参与人次 / 全网平均分 / 最高分
 │       └── _middleware.js  # 可选：CORS / OPTIONS 预检
-├── schema.sql              # D1 建表 + 37 题初始数据（作者答案只在库里）
+├── migrations/
+│   └── 001_submissions.sql # 增量迁移：submissions 表（可对已有线上库安全重复执行）
+├── schema.sql              # D1 建表 + 58 题初始数据（1-37 偏好题 / 38-58 情景题，作者答案只在库里）
 ├── wrangler.toml           # Pages 配置 + D1 绑定
 └── README.md
 ```
@@ -36,6 +82,18 @@ CREATE TABLE questions (
   options TEXT NOT NULL,          -- JSON 字符串，如 ["A. 可口可乐","B. 百事可乐",...]
   author_answer TEXT NOT NULL,    -- 大写字母组合，如 'A' 或 'ABCD'
   sort_order INTEGER NOT NULL DEFAULT 0
+);
+
+-- 答题记录表：仅用于聚合统计，不存任何选项内容
+CREATE TABLE submissions (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  match_percent INTEGER NOT NULL,             -- 本次匹配度 0-100
+  raw_score     INTEGER NOT NULL,
+  total         INTEGER NOT NULL,
+  level_key     TEXT,
+  cheated       INTEGER NOT NULL DEFAULT 0,   -- 命中反作弊的行不计入平均分
+  duration_ms   INTEGER,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now'))
 );
 ```
 
@@ -72,7 +130,7 @@ npx wrangler d1 create matching-quiz-db
 ```bash
 cd matching-quiz
 
-# 初始化【本地】D1 数据库（执行 schema.sql 的建表与 37 题）
+# 初始化【本地】D1 数据库（执行 schema.sql 的建表与 58 题）
 npx wrangler d1 execute matching-quiz-db --local --file=./schema.sql
 
 # 启动本地开发服务器（Pages + Functions + 本地 D1）
@@ -81,6 +139,11 @@ npx wrangler pages dev . --d1 DB=matching-quiz-db
 ```
 
 打开终端提示的本地地址（通常 http://localhost:8788）即可预览。
+
+> 若你的本地库是更早版本（还没有 `submissions` 表），补跑一次增量迁移即可：
+> ```bash
+> npx wrangler d1 execute matching-quiz-db --local --file=./migrations/001_submissions.sql
+> ```
 
 ## 三、部署到 Cloudflare Pages
 
@@ -108,32 +171,59 @@ npx wrangler pages deploy . --branch main
 ```
 
 ### POST /api/submit
-请求体：
+请求体（`answers` 为**本次抽取的题目子集**——支持「从题库抽样」，无需提交全部题目；选中“其他”时可附带 `userText`；`durationMs` 为作答总耗时，用于反作弊）：
 ```json
-{ "answers": [ { "questionId": 1, "userAnswer": "A" }, { "questionId": 2, "userAnswer": "ABCD" } ] }
+{ "durationMs": 186000, "answers": [ { "questionId": 1, "userAnswer": "A" }, { "questionId": 2, "userAnswer": "ABCD" }, { "questionId": 3, "userAnswer": "E", "userText": "一加 Ace" } ] }
 ```
-响应：
+响应（**绝不包含 `authorAnswer`**；`total` 为本次提交题量，`details` 为本次题目明细，供前端做维度分析）：
 ```json
 {
-  "rawScore": 2850,
+  "rawScore": 1540,
   "matchPercent": 77,
-  "total": 37,
-  "level": "高度匹配，默契不错",
+  "total": 20,
+  "level": "灵魂同频，你们很像",
   "levelKey": "high",
-  "topMatches": [ { "questionId": 4, "text": "...", "userAnswer": "A", "authorAnswer": "A", "score": 100 } ],
-  "topDifferences": [ { "questionId": 9, "text": "...", "userAnswer": "A", "authorAnswer": "F", "score": 0 } ]
+  "cheated": false,
+  "cheatReasons": [],
+  "stats": { "average": 62, "count": 148, "beatPercent": 71 },
+  "details": [
+    { "questionId": 1, "text": "你喜欢喝什么可乐？", "type": "single", "userAnswer": "A", "score": 100 },
+    { "questionId": 3, "text": "你最想使用的手机品牌？", "type": "single", "userAnswer": "E", "userText": "一加 Ace", "score": 0 }
+  ]
 }
 ```
+
+> 反作弊命中时 `cheated=true`，`cheatReasons` 为命中的原因（`straight-line` 连续同选 / `too-fast` 作答过快，判定阈值：平均每题 < 400ms）。
+
+### GET /api/stats
+返回全网聚合统计（仅用于展示，**不含任何个人答案**；命中反作弊的记录不计入）：
+```json
+{ "count": 148, "average": 62, "best": 100 }
+```
+> `submissions` 表尚未迁移时返回 `{ "count": 0, "average": null, "best": null }`，前端会自动隐藏平均分模块，不影响正常测试。
+
+### 平均分统计说明
+
+- 每次 `POST /api/submit` 都会把结果写入 `submissions`（`match_percent` / `raw_score` / `level_key` / `cheated` / `duration_ms`）。
+- **命中反作弊的提交（`cheated=1`）不入平均分**，避免乱点污染均值；但它们仍会入库以便日后排查。
+- 写入或统计失败时**静默降级**（`stats: null`），绝不影响正常返回结果。
+- `beatPercent` = 全网有效记录中分数低于你的比例。
+- 已有线上库升级：只需执行增量迁移，**不要**重跑 `schema.sql`（那会 `DROP` 掉 `questions` 重建）：
+  ```bash
+  npx wrangler d1 execute matching-quiz-db --remote --file=./migrations/001_submissions.sql
+  ```
+
+> 前端的多维雷达、维度剖析、深度报告均由 `script.js` 依据 `details` 在本地聚合生成（维度分组定义在 `script.js` 的 `DIMENSIONS` 常量里，可自行调整）。
 
 ## 五、安全设计说明
 
 - **前端零答案**：`script.js` 中不存在任何 `author_answer` 或类似变量；标准答案只存在于 D1。
 - **GET /api/questions** 显式只 `SELECT id, text, type, options`，排除 `author_answer`。
-- **POST /api/submit** 读取 `author_answer` 后仅用于后端计算；是否回传由
-  `submit.js` 顶部 `EXPOSE_AUTHOR_IN_BREAKDOWN` 控制（默认 `true`，仅回传最一致/差异最大的 6 题明细；改为 `false` 则完全不回传作者答案）。
+- **POST /api/submit** 读取 `author_answer` 后仅用于后端计算，**返回结果中不含作者答案**（只回传每题得分与你的选择）。
 - **防注入**：所有数据库查询均使用 `prepare(...).bind(...)` 参数化。
-- **输入校验**：`answers` 长度须与题目数一致；`userAnswer` 必须是大写字母组合；字母须在选项范围内；单选只能 1 个、多选至少 1 个。
+- **输入校验**：`answers` 长度须与题目数一致；`userAnswer` 必须是大写字母组合；字母须在选项范围内；单选只能 1 个、多选至少 1 个；`userText` 仅做类型/长度收敛（≤40 字）。
 - **轻度限流**：`submit.js` 内置基于 IP 的 1 分钟 10 次内存速率限制（单实例有效）。
+- **平均分只做聚合**：`submissions` 表**不存**用户选了哪些选项、也不存 IP 或任何身份标识，只存分数与耗时；接口只返回平均值/人次/击败比例这类聚合数字。
 
 ## 六、匹配度算法
 
@@ -141,9 +231,32 @@ npx wrangler pages deploy . --branch main
 - **多选（multiple）**：用 **Jaccard 相似度** = `|交集| / |并集|`，范围 0-100，部分重合给部分分。
 - 每题得分 0-100，**匹配度百分比 = 各题得分的平均值**（即 `matchPercent = round(Σ得分 / 题数)`）。
 - 原始分 `rawScore` = 各题得分之和（满分 `题数 × 100`）。
-- 等级：
-  - 85-100：灵魂同频，你们很像（soulmate）
-  - 70-84：高度匹配，默契不错（high）
-  - 50-69：中等匹配，有同有异（medium）
-  - 30-49：差异较大，但可能互补（low）
-  - 0-29：完全不同频，两个世界（none）
+- 等级（称号文案在 `script.js` 的 `TIERS` 里，可自由改）：
+  - 90-100：可以跟作者配了 💍（soulmate）
+  - 75-89：灵魂同频 🌟（high）
+  - 55-74：半同频选手 🤝（medium）
+  - 35-54：熟悉的陌生人 👀（low）
+  - 15-34：平行宇宙来客 🛸（stranger）
+  - 0-14：作者看了陷入沉默 🤐（none）
+
+## 七、维度分组（结果页分析用，共七维）
+
+| 维度 | 题目 id |
+|---|---|
+| 🍜 吃喝日常 | 1, 4, 11, 20, 21, 22, 23, 24, 25, 34, 35 |
+| 💻 数码科技 | 3, 5, 12, 13, 26, 27, 28, 29, 30, 31, 32 |
+| 🎮 游戏娱乐 | 2, 14 |
+| 🎬 内容口味 | 6, 7, 15, 16, 33 |
+| 🛌 生活节奏 | 8, 10, 17, 36, 37 |
+| 🎨 审美性情 | 9, 18, 19 |
+| 🧭 处世之道 | 38-58（情景题） |
+
+> 需与 `script.js` 中 `DIMENSIONS` 保持一致（改题号时两处都要改）。
+
+## 八、部署实战踩坑备忘（Cloudflare Pages + D1）
+
+- **Build command 不能填 `npx wrangler deploy`**（那是 Workers 命令，会报 `Missing entry-point`）。控制台又不允许留空，可填 `echo "no build step"`；或干脆用命令行 `wrangler pages deploy .` 直推（本项目即采用此方式）。
+- **API Token 必须是通用 Token**（My Profile → API Tokens → Custom token，含 `Cloudflare Pages: Edit`、`D1: Edit`），**不是 R2/S3 凭证**（后者会报 `Invalid access token [9109]`）。
+- **首次部署若报 “The Pages project xxx does not exist”**：先 `npx wrangler pages project create <name> --production-branch=main`。
+- **灌数据到线上库必须加 `--remote`**：`npx wrangler d1 execute matching-quiz-db --remote --file=./schema.sql`；不加则只写进本地库 `.wrangler/state`，线上仍是空库。
+- 用 `wrangler pages deploy` 时，`wrangler.toml` 的 `[[d1_databases]]` 会自动绑定 D1（变量名 `DB`）。

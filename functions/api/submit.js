@@ -1,31 +1,11 @@
 // functions/api/submit.js
 // POST /api/submit
-// 接收用户选项（大写字母组合，如 'A' 或 'ABC'），从 D1 读取作者答案（仅后端），
-// 按「单选完全匹配 / 多选 Jaccard 相似度」计算匹配度后返回结果。
+// 接收用户选项（大写字母组合，如 'A' 或 'ABC'；选了“其他”时可附带 userText），
+// 从 D1 读取作者答案（仅后端），按「单选完全匹配 / 多选 Jaccard 相似度」计算匹配度后返回结果。
 //
 // 安全要点：
 //  - 所有数据库查询均使用 prepare(...).bind(...) 参数化，杜绝 SQL 注入。
-//  - author_answer 只在后端参与计算，默认不进入前端（见 EXPOSE_AUTHOR_IN_BREAKDOWN）。
-
-// 若设为 true，结果明细中会附带作者答案（最多 6 题），方便前端展示“你的选择 vs 作者选择”。
-// 若想更严格地保密，可改为 false，前端将只展示你自己的选择与得分。
-const EXPOSE_AUTHOR_IN_BREAKDOWN = true;
-
-// —— 简单内存速率限制（单实例有效，仅作轻度防护）——
-const WINDOW_MS = 60 * 1000;   // 统计窗口：1 分钟
-const MAX_PER_WINDOW = 10;     // 同一 IP 每分钟最多提交次数
-const counters = new Map();
-
-function isRateLimited(ip) {
-  const now = Date.now();
-  const rec = counters.get(ip);
-  if (!rec || now - rec.start > WINDOW_MS) {
-    counters.set(ip, { start: now, count: 1 });
-    return false;
-  }
-  rec.count += 1;
-  return rec.count > MAX_PER_WINDOW;
-}
+//  - author_answer 只在后端参与计算，绝不进入返回给前端的任何字段。
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -40,6 +20,22 @@ function safeParse(str, fallback) {
   } catch {
     return fallback;
   }
+}
+
+// —— 简单内存速率限制（单实例有效，仅作轻度防护）——
+const WINDOW_MS = 60 * 1000; // 统计窗口：1 分钟
+const MAX_PER_WINDOW = 10;   // 同一 IP 每分钟最多提交次数
+const counters = new Map();
+
+function isRateLimited(ip) {
+  const now = Date.now();
+  const rec = counters.get(ip);
+  if (!rec || now - rec.start > WINDOW_MS) {
+    counters.set(ip, { start: now, count: 1 });
+    return false;
+  }
+  rec.count += 1;
+  return rec.count > MAX_PER_WINDOW;
 }
 
 // 单题得分（0-100）
@@ -67,6 +63,72 @@ function scoreQuestion(type, userAnswer, authorAnswer) {
   return Math.round((inter / union) * 100);
 }
 
+// 等级判定（含 90+ 的“可以跟作者配了”档）
+function tierOf(percent) {
+  if (percent >= 90) return { level: "可以跟作者配了", levelKey: "soulmate" };
+  if (percent >= 75) return { level: "灵魂同频，你们很像", levelKey: "high" };
+  if (percent >= 55) return { level: "高度匹配，默契不错", levelKey: "medium" };
+  if (percent >= 35) return { level: "差异较大，但可能互补", levelKey: "low" };
+  if (percent >= 15) return { level: "平行宇宙来客", levelKey: "stranger" };
+  return { level: "完全不同频，两个世界", levelKey: "none" };
+}
+
+// —— 反作弊：检出明显“没认真作答”的答题模式 ——
+//   1) straight-line：所有题目选了完全相同的答案（一路点同一个字母）
+//   2) too-fast：平均每题作答时间过短（疑似连点/脚本）
+// 返回命中的原因数组，空数组表示正常。
+function detectCheat(answers, durationMs, total) {
+  const reasons = [];
+  const strs = answers.map((a) => a.userAnswer);
+  if (new Set(strs).size === 1) reasons.push("straight-line");
+  if (Number.isFinite(durationMs) && durationMs > 0 && durationMs / total < 400) {
+    reasons.push("too-fast");
+  }
+  return reasons;
+}
+
+// —— 平均分统计 ——
+// 记录本次提交，并返回「全网平均分 / 参与人次 / 击败百分比」。
+// 命中反作弊（cheated）的记录仍然入库，但不计入平均分（保证均值不被乱点污染）。
+// 任何异常（例如 submissions 表尚未迁移）都静默降级为 null，绝不影响正常返回结果。
+async function recordAndStats(env, { matchPercent, rawScore, total, levelKey, cheated, durationMs }) {
+  try {
+    await env.DB
+      .prepare(
+        "INSERT INTO submissions (match_percent, raw_score, total, level_key, cheated, duration_ms) " +
+          "VALUES (?, ?, ?, ?, ?, ?)"
+      )
+      .bind(
+        matchPercent,
+        rawScore,
+        total,
+        levelKey,
+        cheated ? 1 : 0,
+        Number.isFinite(durationMs) && durationMs > 0 ? Math.round(durationMs) : null
+      )
+      .run();
+
+    const row = await env.DB
+      .prepare(
+        "SELECT COUNT(*) AS c, AVG(match_percent) AS a, " +
+          "SUM(CASE WHEN match_percent < ? THEN 1 ELSE 0 END) AS lower " +
+          "FROM submissions WHERE cheated = 0"
+      )
+      .bind(matchPercent)
+      .first();
+
+    const count = row && row.c ? Number(row.c) : 0;
+    if (count === 0) return { average: null, count: 0, beatPercent: null };
+
+    const average = Math.round(Number(row.a));
+    const lower = Number(row.lower) || 0;
+    const beatPercent = Math.round((lower / count) * 100);
+    return { average, count, beatPercent };
+  } catch {
+    return null;
+  }
+}
+
 export async function onRequestPost({ request, env }) {
   // 1) 速率限制
   const ip = request.headers.get("cf-connecting-ip") || "local";
@@ -83,8 +145,8 @@ export async function onRequestPost({ request, env }) {
   }
 
   const answers = body && body.answers;
-  if (!Array.isArray(answers)) {
-    return json({ error: "answers 字段必须为数组。" }, 400);
+  if (!Array.isArray(answers) || answers.length === 0) {
+    return json({ error: "answers 字段必须为非空数组。" }, 400);
   }
 
   // 3) 读取全部题目（含 author_answer 与 options，仅后端使用）
@@ -100,23 +162,33 @@ export async function onRequestPost({ request, env }) {
     return json({ error: "数据库读取失败。" }, 500);
   }
 
-  const total = questions.length;
-  if (total === 0) {
+  const totalBank = questions.length;
+  if (totalBank === 0) {
     return json({ error: "题库为空，请先初始化数据库。" }, 500);
   }
-  if (answers.length !== total) {
+  // 支持「从题库抽样」的部分提交：answers 只需是题库的子集（去重、不超总量）。
+  if (answers.length > totalBank) {
     return json(
-      { error: `答案数量应为 ${total} 题，实际收到 ${answers.length} 题。` },
+      { error: `答案数量（${answers.length}）超过题库总量（${totalBank}）。` },
       400
     );
   }
 
-  // 4) 校验每题答案
+  // 4) 校验每题答案（仅校验本次提交的子集）
   const qMap = new Map(questions.map((q) => [q.id, q]));
+  const seenIds = new Set();
   for (const a of answers) {
-    const q = qMap.get(a.questionId);
+    const qid = a ? Number(a.questionId) : NaN;
+    if (!Number.isInteger(qid)) {
+      return json({ error: "答案格式非法：questionId 须为整数。" }, 400);
+    }
+    if (seenIds.has(qid)) {
+      return json({ error: `题目 ${qid} 重复提交。` }, 400);
+    }
+    seenIds.add(qid);
+    const q = qMap.get(qid);
     if (!q) {
-      return json({ error: `题目不存在：questionId=${a.questionId}` }, 400);
+      return json({ error: `题目不存在：questionId=${qid}` }, 400);
     }
     const ua = a.userAnswer;
     if (typeof ua !== "string" || !/^[A-Z]+$/.test(ua)) {
@@ -126,10 +198,7 @@ export async function onRequestPost({ request, env }) {
       );
     }
     // 选项范围校验
-    let numOptions = 0;
-    try {
-      numOptions = safeParse(q.options, []).length;
-    } catch {}
+    const numOptions = safeParse(q.options, []).length;
     for (const ch of ua) {
       const idx = ch.charCodeAt(0) - 65; // 'A' -> 0
       if (idx < 0 || idx >= numOptions) {
@@ -145,51 +214,59 @@ export async function onRequestPost({ request, env }) {
     if (q.type === "multiple" && ua.length < 1) {
       return json({ error: `题目 ${q.id} 为多选，至少选一个选项` }, 400);
     }
-  }
-
-  // 5) 计算每题得分并汇总
-  let rawScore = 0;
-  const details = [];
-  for (const a of answers) {
-    const q = qMap.get(a.questionId);
-    const score = scoreQuestion(q.type, a.userAnswer, q.author_answer);
-    rawScore += score;
-    const detail = {
-      questionId: a.questionId,
-      text: q.text,
-      userAnswer: a.userAnswer, // 如 'A' 或 'ABC'
-      score,
-    };
-    if (EXPOSE_AUTHOR_IN_BREAKDOWN) {
-      detail.authorAnswer = q.author_answer;
+    // 用户自定义文本（仅“其他”选项会带）：只做长度与类型收敛，不参与计分
+    if (a.userText != null && typeof a.userText !== "string") {
+      return json({ error: `题目 ${q.id} 的自定义文本格式非法` }, 400);
     }
-    details.push(detail);
   }
 
-  // 每题满分 100，matchPercent = 各题均值
-  const matchPercent = Math.round(rawScore / total);
+  // 5) 计算每题得分（仅本次抽取提交的题目，返回明细供前端做维度分析）
+  const details = answers.map((a) => {
+    const q = qMap.get(Number(a.questionId));
+    const detail = {
+      questionId: q.id,
+      text: q.text,
+      type: q.type,
+      userAnswer: a.userAnswer, // 如 'A' 或 'ABC'
+      score: scoreQuestion(q.type, a.userAnswer, q.author_answer),
+    };
+    if (a.userText) {
+      // 截断，防止异常长文本；仅用于前端展示，不参与计分
+      detail.userText = String(a.userText).trim().slice(0, 40);
+    }
+    return detail;
+  });
 
-  // 6) 等级判定
-  let level, levelKey;
-  if (matchPercent >= 85) { level = "灵魂同频，你们很像"; levelKey = "soulmate"; }
-  else if (matchPercent >= 70) { level = "高度匹配，默契不错"; levelKey = "high"; }
-  else if (matchPercent >= 50) { level = "中等匹配，有同有异"; levelKey = "medium"; }
-  else if (matchPercent >= 30) { level = "差异较大，但可能互补"; levelKey = "low"; }
-  else { level = "完全不同频，两个世界"; levelKey = "none"; }
+  const total = details.length; // 本次提交的题量（抽样后的题数），满分 total*100
+  const rawScore = details.reduce((s, d) => s + d.score, 0);
+  const matchPercent = Math.round(rawScore / total); // 0-100
 
-  // 7) 最一致 3 题（得分降序）与差异最大 3 题（得分升序）
-  const byScoreDesc = [...details].sort((x, y) => y.score - x.score);
-  const byScoreAsc = [...details].sort((x, y) => x.score - y.score);
-  const topMatches = byScoreDesc.slice(0, 3);
-  const topDifferences = byScoreAsc.slice(0, 3);
+  const tier = tierOf(matchPercent);
+
+  // 反作弊判定（durationMs 由前端上报，缺省则只做模式判定）
+  const durationMs = Number(body.durationMs);
+  const cheatReasons = detectCheat(answers, durationMs, total);
+  const cheated = cheatReasons.length > 0;
+
+  // 记录提交并统计全网平均分（失败不影响主流程）
+  const stats = await recordAndStats(env, {
+    matchPercent,
+    rawScore,
+    total,
+    levelKey: tier.levelKey,
+    cheated,
+    durationMs,
+  });
 
   return json({
-    rawScore, // 各题得分之和（满分 total*100）
-    matchPercent, // 0-100
+    rawScore,
+    matchPercent,
     total,
-    level,
-    levelKey,
-    topMatches,
-    topDifferences,
+    level: tier.level,
+    levelKey: tier.levelKey,
+    cheated,
+    cheatReasons,
+    stats, // { average, count, beatPercent }，表未迁移时为 null
+    details, // 全部题目（含每题得分），不含 author_answer
   });
 }

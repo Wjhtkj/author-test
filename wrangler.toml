@@ -7,7 +7,7 @@ binding = "DB"
 database_name = "matching-quiz-db"
 # ↓↓↓ 替换为你在 Cloudflare 控制台创建 D1 数据库后得到的 database_id ↓↓↓
 # 执行 `npx wrangler d1 create matching-quiz-db` 后会返回该 id
-database_id = "YOUR_DATABASE_ID_HERE"
+database_id = "a66fdbbe-aac1-4304-8302-417661fa5cb1"
 # ↑↑↑ 例如 database_id = "a1b2c3d4-1234-5678-90ab-cdef12345678" ↑↑↑
 #
 # 说明：

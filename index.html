@@ -2,36 +2,74 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#06070e" />
+  <meta name="description" content="58 道题，测测你和作者到底是不是一路人。" />
   <title>你与作者的匹配度测试</title>
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
-  <div class="app">
-    <header class="app-header">
-      <h1 class="app-title">你与作者的匹配度测试</h1>
-      <p class="app-sub">20 道题，看看你和作者在多大程度上“同频”。</p>
-    </header>
+  <!-- 背景：极光光晕 + 噪点 -->
+  <div class="bg" aria-hidden="true">
+    <span class="orb orb-a"></span>
+    <span class="orb orb-b"></span>
+    <span class="orb orb-c"></span>
+    <span class="noise"></span>
+  </div>
 
-    <!-- 开始页 -->
-    <section id="start-screen" class="screen card">
-      <p class="lead">
-        本测试由 20 道关于生活方式与性格的陈述题组成。请按你的真实情况选择符合程度。
-        标准答案只保存在后端数据库里，由服务器独立计算，前端看不到。
+  <main class="app">
+
+    <!-- ============ 开始页 ============ -->
+    <section id="start-screen" class="screen glass hero">
+      <span class="eyebrow">MATCHING QUIZ&nbsp;&nbsp;·&nbsp;&nbsp;58 题题库</span>
+
+      <h1 class="hero-title">
+        <span class="line">你与作者的</span>
+        <span class="line"><em>匹配度</em>测试</span>
+      </h1>
+
+      <p class="hero-tag">测测你和作者，到底是不是同一个物种。</p>
+      <p class="hero-lead">
+        从 58 道题库里随机抽题，按 7 个主题维度均衡分配——吃喝、数码、游戏、内容、生活、审美、处世，每类题量都接近，抽多少你说了算。<br />
+        凭第一直觉作答，别想太多——想多了，就不像你了。
       </p>
-      <button id="start-btn" class="btn btn-primary" type="button">开始测试</button>
-    </section>
 
-    <!-- 答题页 -->
-    <section id="quiz-screen" class="screen card hidden">
-      <div class="progress">
-        <div class="progress-track"><div id="progress-fill" class="progress-fill"></div></div>
-        <div id="progress-text" class="progress-text">1 / 20</div>
+      <div class="mode-row">
+        <span class="mode-label">抽取题量</span>
+        <div class="segmented" id="mode-select" role="group" aria-label="抽取题量"></div>
       </div>
 
-      <div class="q-head"><span id="q-type" class="q-type"></span></div>
-      <h2 id="question-text" class="question"></h2>
+      <div id="start-stats" class="chip-row">
+        <span class="chip"><i>用时</i><b>约 3 分钟</b></span>
+        <span class="chip"><i>全网平均</i><b>等你第一个</b></span>
+      </div>
 
+      <button id="start-btn" class="btn btn-primary btn-lg" type="button">
+        <span>开始测试</span>
+        <svg class="ico" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M5 12h13M12.5 6l6 6-6 6" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </button>
+
+      <p class="hero-note">
+        作者的标准答案锁在后端数据库里，前端看不见&nbsp;·&nbsp;选「其他」可直接手写&nbsp;·&nbsp;单选点一下自动翻页&nbsp;·&nbsp;每轮题目随机抽
+      </p>
+    </section>
+
+    <!-- ============ 答题页 ============ -->
+    <section id="quiz-screen" class="screen glass quiz hidden">
+      <div class="quiz-top">
+        <span class="brand">匹配度测试</span>
+        <span id="q-type" class="q-type"></span>
+      </div>
+
+      <div class="progress">
+        <div class="progress-track"><div id="progress-fill" class="progress-fill"></div></div>
+        <span id="progress-text" class="progress-text">1 / 20</span>
+      </div>
+
+      <h2 id="question-text" class="question"></h2>
       <div id="options" class="options"></div>
 
       <div class="quiz-footer">
@@ -40,33 +78,119 @@
       </div>
     </section>
 
-    <!-- 结果页 -->
-    <section id="result-screen" class="screen card hidden">
-      <p class="result-label">你与作者的匹配度</p>
-      <div class="score-circle">
-        <span id="match-percent">0</span><i>%</i>
+    <!-- ============ 结果页 ============ -->
+    <section id="result-screen" class="screen glass result hidden">
+      <p class="result-label">你的匹配度</p>
+
+      <div class="ring-wrap">
+        <svg class="ring" viewBox="0 0 120 120" aria-hidden="true">
+          <circle class="ring-bg" cx="60" cy="60" r="52"></circle>
+          <circle class="ring-fg" id="ring-fg" cx="60" cy="60" r="52"></circle>
+        </svg>
+        <div class="ring-center"><span id="match-percent">0</span><i>%</i></div>
       </div>
-      <p id="level-text" class="level"></p>
+
+      <h2 id="tier-title" class="tier-title"></h2>
+      <p id="tier-desc" class="tier-desc"></p>
       <p id="raw-score" class="raw"></p>
 
-      <div class="breakdown">
-        <div class="breakdown-col">
-          <h3>最一致的 3 题</h3>
-          <ul id="top-matches" class="bd-list"></ul>
+      <div id="punish-notice" class="notice hidden"></div>
+      <button id="unlock-btn" class="btn unlock-btn hidden" type="button">我偏要看真实结果 😤</button>
+
+      <!-- ===== 分析区（惩罚模式下整体隐藏）===== -->
+      <div id="analysis" class="analysis">
+
+        <div class="tiles">
+          <div class="tile"><span class="tile-k">匹配度</span><b class="tile-v" id="sum-percent">--</b></div>
+          <div class="tile"><span class="tile-k">等级称号</span><b class="tile-v" id="sum-tier">--</b></div>
+          <div class="tile"><span class="tile-k">最强同频</span><b class="tile-v" id="sum-best">--</b></div>
+          <div class="tile"><span class="tile-k">最离谱分歧</span><b class="tile-v" id="sum-worst">--</b></div>
         </div>
-        <div class="breakdown-col">
-          <h3>差异最大的 3 题</h3>
-          <ul id="top-differences" class="bd-list"></ul>
+
+        <div id="avg-box" class="hidden">
+          <h3 class="sec-title">全网平均分对比</h3>
+          <div class="panel avg-inner">
+            <div class="avg-head">
+              <span class="avg-title">🏆 你 vs 全网平均</span>
+              <span class="avg-count" id="avg-count">--</span>
+            </div>
+            <div class="avg-rows">
+              <div class="avg-row">
+                <span class="avg-label">你</span>
+                <div class="avg-bar"><div class="avg-fill you" id="avg-you-fill"></div></div>
+                <span class="avg-val" id="avg-you-val">--</span>
+              </div>
+              <div class="avg-row">
+                <span class="avg-label">平均</span>
+                <div class="avg-bar"><div class="avg-fill mean" id="avg-mean-fill"></div></div>
+                <span class="avg-val" id="avg-mean-val">--</span>
+              </div>
+            </div>
+            <div class="avg-foot">
+              <span class="avg-delta" id="avg-delta">--</span>
+              <span class="avg-beat" id="avg-beat">--</span>
+            </div>
+            <p class="avg-note" id="avg-note"></p>
+          </div>
+        </div>
+
+        <h3 class="sec-title">六维同频雷达</h3>
+        <div class="panel radar-box">
+          <svg id="radar" viewBox="0 0 320 300" role="img" aria-label="六维同频雷达图"></svg>
+        </div>
+        <p id="radar-summary" class="note"></p>
+
+        <h3 class="sec-title">各维度同频度</h3>
+        <div id="dim-list" class="dim-list"></div>
+
+        <h3 class="sec-title">专属深度报告</h3>
+        <div class="panel report-box">
+          <div class="report-sec">
+            <span class="token">你们的共同点</span>
+            <div id="rep-common" class="report-text"></div>
+          </div>
+          <div class="report-sec">
+            <span class="token warn">最离谱的分歧</span>
+            <div id="rep-diff" class="report-text"></div>
+          </div>
+          <div class="report-sec">
+            <span class="token ok">终极结论</span>
+            <div id="rep-final" class="report-text"></div>
+          </div>
+        </div>
+
+        <div class="breakdown">
+          <div class="breakdown-col">
+            <h3>最一致的 3 题</h3>
+            <ul id="top-matches" class="bd-list"></ul>
+          </div>
+          <div class="breakdown-col">
+            <h3>分歧最大的 3 题</h3>
+            <ul id="top-differences" class="bd-list"></ul>
+          </div>
         </div>
       </div>
 
-      <button id="restart-btn" class="btn btn-primary" type="button">重新测试</button>
+      <div class="actions">
+        <button id="download-btn" class="btn" type="button">保存结果长图</button>
+        <button id="copy-btn" class="btn" type="button">复制结果文案</button>
+        <button id="restart-btn" class="btn btn-primary" type="button">重新测试</button>
+      </div>
+
+      <p class="poster-footer">你与作者的匹配度测试 · matching-quiz.pages.dev</p>
     </section>
 
-    <!-- 错误提示 -->
-    <p id="error-toast" class="error-toast hidden"></p>
-  </div>
+    <!-- ============ 站点页脚 ============ -->
+    <footer class="site-footer">
+      <a class="footer-blog" href="https://wjhtkjwz.eu.org" target="_blank" rel="noopener">去博客看看作者其他项目 →</a>
+      <div class="footer-copy">Copyright © 2026 Endless647. 保留所有权利。</div>
+    </footer>
 
+  </main>
+
+  <p id="error-toast" class="toast hidden"></p>
+
+  <script src="./vendor/html2canvas.min.js"></script>
   <script src="./script.js"></script>
 </body>
 </html>

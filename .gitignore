@@ -1,0 +1,14 @@
+# Cloudflare Wrangler 本地缓存（含本地 D1 数据库文件，切勿上传）
+.wrangler/
+
+# 系统/编辑器
+.DS_Store
+Thumbs.db
+*.log
+
+# 本地开发 / 校验用临时文件（不要部署上线）
+_preview.html
+_verify.mjs
+_shot_*.png
+_t*.mjs
+_c*.mjs
