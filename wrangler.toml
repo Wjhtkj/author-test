@@ -1,0 +1,15 @@
+name = "matching-quiz"
+pages_build_output_dir = "."
+compatibility_date = "2024-09-23"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "matching-quiz-db"
+# ↓↓↓ 替换为你在 Cloudflare 控制台创建 D1 数据库后得到的 database_id ↓↓↓
+# 执行 `npx wrangler d1 create matching-quiz-db` 后会返回该 id
+database_id = "YOUR_DATABASE_ID_HERE"
+# ↑↑↑ 例如 database_id = "a1b2c3d4-1234-5678-90ab-cdef12345678" ↑↑↑
+#
+# 说明：
+#   - binding 的值 "DB" 必须与后端代码里的 env.DB 一致
+#   - 本地开发时也可以写成数据库名：--d1 DB=matching-quiz-db（无需先拿 id）
