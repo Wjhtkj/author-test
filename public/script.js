@@ -185,6 +185,9 @@ const state = {
   submitting: false,
   startTime: 0,     // 开始答题的时间戳（用于反作弊的时长判定）
   result: null,     // 最近一次结果，供复制/导出使用
+  // —— 以下两项服务于「本机存档」——
+  quizActive: false,     // 是否正处于一局真实作答中（开始页预抽题时为 false，避免误存进度）
+  resultQuestions: [],   // 当前展示的结果对应的题集，用于把选项字母还原成文案（回看上次结果时也要能还原）
 };
 
 // DOM 引用
@@ -220,6 +223,9 @@ const avgMeanVal = $("avg-mean-val");
 const avgDelta = $("avg-delta");
 const avgBeat = $("avg-beat");
 const avgNote = $("avg-note");
+// 断点续答 / 上次结果
+const resumeSlot = $("resume-slot");
+const startBtnLabel = $("start-btn-label");
 
 // —— 小工具 ——
 const reduceMotion = () =>
@@ -400,8 +406,12 @@ async function loadBank() {
     const data = await res.json();
     if (data.questions && data.questions.length) {
       state.bank = data.questions;
-      sampleIntoState();
-      renderStartChips(); // 依据当前档位刷新用时估算
+      // 用户在题库返回前就点了「继续答题」的话，此刻正在作答 ——
+      // 不能重新抽样去覆盖他手上的题集，否则题会当场换掉
+      if (!state.quizActive && !state.result) {
+        sampleIntoState();
+        renderStartChips(); // 依据当前档位刷新用时估算
+      }
     }
   } catch {
     /* 忽略：开始测试时会再次尝试拉取 */
@@ -415,13 +425,16 @@ function sampleIntoState() {
 
 // —— 抽题量档位选择器 ——
 // 依据 COUNT_PRESETS 渲染按钮（含「全部」），点击即切换档位并重新抽样。
+function syncPresetButtons() {
+  if (!modeSelect) return;
+  modeSelect.querySelectorAll("[data-count]").forEach((b) => {
+    b.classList.toggle("is-active", Number(b.dataset.count) === state.targetPreset);
+  });
+}
+
 function applyTargetPreset(preset) {
   state.targetPreset = preset;
-  if (modeSelect) {
-    modeSelect.querySelectorAll("[data-count]").forEach((b) => {
-      b.classList.toggle("is-active", Number(b.dataset.count) === preset);
-    });
-  }
+  syncPresetButtons();
   sampleIntoState();
   renderStartChips(); // 刷新用时估算（题量越少越快）
 }
@@ -441,11 +454,204 @@ function initModeSelector() {
   });
 }
 
+// ============================================================
+// 本机存档：断点续答 + 回看上次结果
+// 只写 localStorage，不上传。存的全是「你自己的」数据——题目文案、你的选择、得分，
+// 以及 /api/questions 与 /api/submit 本来就返回给你的字段，其中不含 author_answer，
+// 所以即便被本机用户翻出来，也拿不到作者答案。
+// ============================================================
+const SAVE_VERSION = 1; // 存档结构版本：字段有变动时 +1，旧存档会被自动丢弃（不迁移）
+const KEY_PROGRESS = "mq.progress.v1";
+const KEY_RESULT = "mq.lastResult.v1";
+const PROGRESS_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 未完成的进度保留 7 天
+
+// localStorage 在隐私模式或禁用存储时会直接抛异常，统一降级为「不存档」而不是让页面崩掉
+function lsRead(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+function lsWrite(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+    return true;
+  } catch {
+    return false; // 配额满 / 不可用：静默放弃存档，绝不影响正常作答
+  }
+}
+function lsRemove(key) {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    /* 忽略 */
+  }
+}
+
+function readProgress() {
+  const s = lsRead(KEY_PROGRESS);
+  if (!s || s.v !== SAVE_VERSION) return null;
+  if (!Array.isArray(s.questions) || s.questions.length === 0) return null;
+  // 一题都没答的不算「中断的进度」，否则开始页会出现毫无意义的 0/20
+  if (!s.answers || Object.keys(s.answers).length === 0) return null;
+  if (!s.savedAt || Date.now() - s.savedAt > PROGRESS_TTL_MS) return null; // 过期即失效
+  return s;
+}
+function readLastResult() {
+  const s = lsRead(KEY_RESULT);
+  if (!s || s.v !== SAVE_VERSION) return null;
+  if (!s.data || typeof s.data.matchPercent !== "number") return null;
+  return s;
+}
+function clearProgress() {
+  lsRemove(KEY_PROGRESS);
+}
+function clearLastResult() {
+  lsRemove(KEY_RESULT);
+}
+
+// 进度落盘（每次换题、每次改答案都会调用）
+function persistProgress() {
+  if (!state.quizActive) return;
+  if (!state.questions.length || Object.keys(state.answers).length === 0) {
+    clearProgress();
+    return;
+  }
+  lsWrite(KEY_PROGRESS, {
+    v: SAVE_VERSION,
+    savedAt: Date.now(),
+    preset: state.targetPreset,
+    current: state.current,
+    answers: state.answers,
+    // 已用掉的作答时长：续答时用它复原计时，避免把中途离开的几小时算进 durationMs
+    elapsedMs: state.startTime ? Date.now() - state.startTime : 0,
+    questions: state.questions,
+  });
+}
+
+function saveLastResult(data) {
+  lsWrite(KEY_RESULT, {
+    v: SAVE_VERSION,
+    at: Date.now(),
+    data,                            // details 里只有题目文案、你的选择、得分
+    questions: state.resultQuestions, // 回看时要把选项字母还原成文案，得留一份当时的题集
+  });
+}
+
+// 「刚刚 / 3 分钟前 / 昨天 / 10 月 1 日」
+function fmtWhen(ts) {
+  if (!ts) return "刚刚";
+  const diff = Date.now() - ts;
+  if (diff < 60e3) return "刚刚";
+  if (diff < 3600e3) return `${Math.floor(diff / 60e3)} 分钟前`;
+  if (diff < 86400e3) return `${Math.floor(diff / 3600e3)} 小时前`;
+  if (diff < 172800e3) return "昨天";
+  const d = new Date(ts);
+  return `${d.getMonth() + 1} 月 ${d.getDate()} 日`;
+}
+
+// 有未完成进度时，主按钮改叫「开始新的一局」，让「继续答题」更像默认选项
+function syncStartBtnLabel() {
+  if (!startBtnLabel) return;
+  startBtnLabel.textContent = readProgress() ? "开始新的一局" : "开始测试";
+}
+
+// —— 开始页：渲染「继续答题 / 查看上次结果」两张卡片 ——
+function renderResume() {
+  if (!resumeSlot) return;
+  const prog = readProgress();
+  const last = readLastResult();
+  const cards = [];
+
+  if (prog) {
+    const total = prog.questions.length;
+    const done = Object.keys(prog.answers).length;
+    const pct = Math.round((done / total) * 100);
+    cards.push(`
+      <div class="resume-card" data-kind="progress">
+        <div class="rc-main">
+          <span class="rc-k">未完成的测试 · ${escapeHtml(fmtWhen(prog.savedAt))}</span>
+          <p class="rc-t">已答 <b>${done}</b> / ${total} 题，还差 ${total - done} 题</p>
+          <div class="rc-bar"><i data-w="${pct}"></i></div>
+        </div>
+        <div class="rc-acts">
+          <button type="button" class="btn btn-primary rc-go" data-act="resume">继续答题</button>
+          <button type="button" class="rc-x" data-act="drop-progress" title="放弃这次进度" aria-label="放弃这次进度">✕</button>
+        </div>
+      </div>`);
+  }
+
+  if (last) {
+    const d = last.data;
+    const tier = TIERS[d.levelKey] || TIERS.medium;
+    // 命中反作弊的那次，结果页本来就是「??」，这里保持一致，不要把真实分泄露在开始页
+    const score = d.cheated
+      ? `<span class="rc-sc">??</span>`
+      : `<span class="rc-sc">${d.matchPercent}%</span>`;
+    cards.push(`
+      <div class="resume-card" data-kind="result">
+        <div class="rc-main">
+          <span class="rc-k">上次的结果 · ${escapeHtml(fmtWhen(last.at))}</span>
+          <p class="rc-t">${score} <b>${escapeHtml(tier.title)}</b> · 共 ${d.total} 题</p>
+        </div>
+        <div class="rc-acts">
+          <button type="button" class="btn rc-go" data-act="view-result">查看上次结果</button>
+          <button type="button" class="rc-x" data-act="drop-result" title="清除这条记录" aria-label="清除这条记录">✕</button>
+        </div>
+      </div>`);
+  }
+
+  resumeSlot.hidden = cards.length === 0;
+  resumeSlot.innerHTML = cards.join("");
+  if (cards.length === 0) return;
+
+  // 下一帧再赋宽度，触发进度条生长动画
+  requestAnimationFrame(() => {
+    resumeSlot.querySelectorAll(".rc-bar i").forEach((el) => {
+      el.style.width = el.dataset.w + "%";
+    });
+  });
+  syncStartBtnLabel();
+}
+
+// —— 继续未完成的答题 ——
+function resumeQuiz(prog) {
+  clearError();
+  cancelAdvance();
+  state.questions = prog.questions;
+  state.answers = { ...prog.answers };
+  state.current = Math.min(Math.max(0, Number(prog.current) || 0), prog.questions.length - 1);
+  // 只复原「真正用于作答的时间」，中途离开的时长不计入 —— 否则 durationMs 会被撑大，
+  // 反作弊的 too-fast 判定就永远不可能命中
+  state.startTime = Date.now() - (Number(prog.elapsedMs) || 0);
+  state.result = null;
+  state.resultQuestions = [];
+  state.quizActive = true;
+  if (typeof prog.preset === "number") {
+    state.targetPreset = prog.preset;
+    syncPresetButtons();
+  }
+  startScreen.classList.add("hidden");
+  resultScreen.classList.add("hidden");
+  quizScreen.classList.remove("hidden");
+  renderQuestion();
+}
+
+// —— 回看上一次结果：直接本地渲染，不重新提交，不污染全网统计 ——
+function viewSavedResult(last) {
+  clearError();
+  cancelAdvance();
+  state.quizActive = false;
+  renderResult(last.data, last.questions || []);
+}
+
 // —— 开始测试 ——
 async function startQuiz() {
   clearError();
   startBtn.disabled = true;
-  startBtn.textContent = "加载中…";
+  if (startBtnLabel) startBtnLabel.textContent = "加载中…";
   try {
     // 题库未预载时兜底拉取；已载则复用，避免重复请求
     if (state.bank.length === 0) {
@@ -461,16 +667,20 @@ async function startQuiz() {
     state.answers = {};
     state.current = 0;
     state.result = null;
+    state.resultQuestions = [];
+    clearProgress(); // 点「开始新的一局」= 明确放弃上一次未完成的进度
+    state.quizActive = true; // 从此刻起，每次改答案 / 换题都会落盘
     state.startTime = Date.now(); // 计时开始（用于反作弊）
     startScreen.classList.add("hidden");
     resultScreen.classList.add("hidden");
     quizScreen.classList.remove("hidden");
     renderQuestion();
   } catch (err) {
+    state.quizActive = false;
     showError("加载题目失败：" + err.message);
   } finally {
     startBtn.disabled = false;
-    startBtn.textContent = "开始测试";
+    syncStartBtnLabel(); // 而不是写死回「开始测试」——否则会连带抹掉按钮里的箭头图标
   }
 }
 
@@ -523,6 +733,8 @@ function renderQuestion() {
     nextBtn.textContent = isLast ? "查看结果" : "下一题";
     nextBtn.disabled = !chosenStr;
   }
+
+  persistProgress(); // 每次换题都落盘，供中断后回来续答
 }
 
 // 轻量刷新选中态与按钮可用性（不重建 DOM，避免每次点选都重放入场动画）
@@ -534,6 +746,8 @@ function refreshSelectionUI() {
     el.classList.toggle("selected", chosenSet.has(el.dataset.letter));
   });
   nextBtn.disabled = !chosenStr;
+
+  persistProgress(); // 每次改答案都落盘（含「全部取消」→ 会清掉存档）
 }
 
 // —— 点击某个选项 ——
@@ -636,7 +850,12 @@ async function submitAnswers() {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "提交失败");
+    // 本局结束：撤掉进度存档、改存这次结果。
+    // 顺序不能反 —— saveLastResult 要读 renderResult 里刚设好的 state.resultQuestions。
+    state.quizActive = false;
+    clearProgress();
     renderResult(data);
+    saveLastResult(data);
   } catch (err) {
     showError("提交失败：" + err.message);
     nextBtn.disabled = false;
@@ -694,9 +913,16 @@ function setRing(percent, color) {
 }
 
 // —— 渲染结果 ——
-function renderResult(data) {
+// questions 可选：回看「上次结果」时传入当时那套题；不传则用本轮题集。
+function renderResult(data, questions) {
+  startScreen.classList.add("hidden");
   quizScreen.classList.add("hidden");
   resultScreen.classList.remove("hidden");
+
+  // 结果页要把「选项字母」还原成选项文案，所以必须知道当时用的是哪套题。
+  // 回看历史结果时若沿用开始页预抽的题集，fmtUserAnswer 会找不到题目、整列显示「—」。
+  state.resultQuestions =
+    Array.isArray(questions) && questions.length ? questions : state.questions;
 
   const realTier = TIERS[data.levelKey] || TIERS.medium;
   const dims = computeDimensions(data.details);
@@ -891,7 +1117,8 @@ function renderBreakdown(ul, items) {
 }
 
 function fmtUserAnswer(detail) {
-  const q = state.questions.find((x) => x.id === detail.questionId);
+  const pool = state.resultQuestions.length ? state.resultQuestions : state.questions;
+  const q = pool.find((x) => x.id === detail.questionId);
   if (!q || !detail.userAnswer) return "—";
   return detail.userAnswer
     .split("")
@@ -992,12 +1219,15 @@ async function downloadResult() {
 function restart() {
   clearError();
   cancelAdvance();
+  state.quizActive = false;
+  state.result = null;
+  state.resultQuestions = [];
   resultScreen.classList.add("hidden");
   startScreen.classList.remove("hidden");
   sampleIntoState(); // 重新抽样，开始页题量保持稳定（实际题集每轮不同）
   state.answers = {};
   state.current = 0;
-  state.result = null;
+  renderResume();  // 此时「未完成的测试」应已消失，只剩「查看上次结果」
   loadGlobalStats(); // 刷新平均分（含刚才这一次提交）
 }
 
@@ -1010,6 +1240,32 @@ copyBtn.addEventListener("click", copyResult);
 downloadBtn.addEventListener("click", downloadResult);
 unlockBtn.addEventListener("click", unlockReal);
 
+// —— 开始页存档卡片：用事件委托（卡片是按存档动态重建的）——
+if (resumeSlot) {
+  resumeSlot.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-act]");
+    if (!btn) return;
+    const act = btn.dataset.act;
+    if (act === "resume") {
+      const prog = readProgress();
+      if (prog) resumeQuiz(prog);
+      else renderResume(); // 存档刚好没了（如另一个标签页清掉）：刷新一下卡片
+    } else if (act === "drop-progress") {
+      clearProgress();
+      renderResume();
+    } else if (act === "view-result") {
+      const last = readLastResult();
+      if (last) viewSavedResult(last);
+      else renderResume();
+    } else if (act === "drop-result") {
+      clearLastResult();
+      renderResume();
+    }
+  });
+}
+
+// 开始页先渲染本机存档（继续答题 / 查看上次结果）——不依赖题库，可立即出图
+renderResume();
 // 页面加载 / 重新开始时拉取全网统计（开始页展示平均分）
 loadGlobalStats();
 // 初始化抽题量档位选择器（开始页可选 10 / 20 / 30 / 全部）

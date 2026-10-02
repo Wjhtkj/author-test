@@ -44,8 +44,11 @@
         <span class="chip"><i>全网平均</i><b>等你第一个</b></span>
       </div>
 
+      <!-- 断点续答 / 上次结果：有本机存档时由 script.js 填内容，否则保持 hidden -->
+      <div id="resume-slot" class="resume-slot" hidden></div>
+
       <button id="start-btn" class="btn btn-primary btn-lg" type="button">
-        <span>开始测试</span>
+        <span id="start-btn-label">开始测试</span>
         <svg class="ico" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path d="M5 12h13M12.5 6l6 6-6 6" stroke="currentColor" stroke-width="2"
                 stroke-linecap="round" stroke-linejoin="round" />
@@ -190,7 +193,7 @@
     <footer class="site-footer">
       <a class="footer-blog" href="https://wjhtkjwz.eu.org" target="_blank" rel="noopener">去博客看看作者其他项目 →</a>
       <div class="footer-copy">Copyright © 2026 Endless647. 保留所有权利。</div>
-      <p class="footer-disclaimer">免责声明：本测试为娱乐向小工具，题目与结果仅供消遣，不构成任何专业测评、心理诊断或对真实关系的判断。作答数据仅用于生成本次结果与全网平均分统计，不收集个人身份信息。</p>
+      <p class="footer-disclaimer">免责声明：本测试为娱乐向小工具，题目与结果仅供消遣，不构成任何专业测评、心理诊断或对真实关系的判断。作答数据仅用于生成本次结果与全网平均分统计，不收集个人身份信息。作答进度与上一次的结果只保存在你自己这台设备的浏览器里（localStorage），仅用于中断后继续作答或回看，不会上传；随时可在开始页点「✕」清除。</p>
     </footer>
 
   </main>
