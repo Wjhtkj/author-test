@@ -7,8 +7,10 @@ Thumbs.db
 *.log
 
 # 本地开发 / 校验用临时文件（不要提交；它们已不在发布目录 public/ 内，不会被上线）
-_preview.html
 _shot_*.png
-# 一次性校验脚本一律以下划线开头：用通配覆盖，避免又漏掉某个前缀（曾漏过 _mk*.mjs）
+# 一次性校验脚本 / 产物一律以下划线开头：用通配覆盖，避免又漏掉某个前缀（曾漏过 _mk*.mjs）
 _*.mjs
+_*.py
+_*.html
+_tmpcheck/
 _submissions_backup*.json

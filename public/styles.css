@@ -650,6 +650,150 @@ body {
 .quiz-footer { display: flex; gap: 12px; }
 .quiz-footer .btn { flex: 1; }
 
+/* ---------- 7.5 计算中（答完 → 结果 的过场）---------- */
+.calc {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: min(560px, 72vh);
+  padding: clamp(38px, 7vw, 62px) clamp(24px, 5vw, 46px);
+  text-align: center;
+}
+.calc-label {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 11px;
+  letter-spacing: 3px;
+  color: var(--text-3);
+  text-transform: uppercase;
+}
+
+.calc-ring-wrap {
+  position: relative;
+  width: 178px;
+  height: 178px;
+  margin: 22px 0 4px;
+}
+.calc-ring { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+.calc-track { fill: none; stroke: rgba(255, 255, 255, 0.075); stroke-width: 6; }
+.calc-arc {
+  fill: none;
+  stroke: var(--a1);
+  stroke-width: 6;
+  stroke-linecap: round;
+  stroke-dasharray: 326.7;
+  stroke-dashoffset: 326.7;
+  filter: drop-shadow(0 0 8px rgba(129, 140, 248, 0.6));
+}
+/* 外圈扫描光弧：用遮罩把 conic-gradient 抠成一个环，再匀速旋转 */
+.calc-sweep {
+  position: absolute;
+  inset: 9px;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg 292deg,
+    rgba(129, 140, 248, 0.34) 322deg,
+    rgba(34, 211, 238, 0.42) 348deg,
+    transparent 360deg
+  );
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 13px), #000 calc(100% - 12px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 13px), #000 calc(100% - 12px));
+  animation: calc-spin 2.1s linear infinite;
+}
+@keyframes calc-spin { to { transform: rotate(360deg); } }
+
+.calc-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-bottom: 4px;
+}
+.calc-center span {
+  font-size: 44px;
+  font-weight: 800;
+  letter-spacing: -2px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums; /* 数字跳动时宽度不抖 */
+  background: linear-gradient(100deg, var(--a1), var(--a2) 50%, var(--a3));
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.calc-center i { font-style: normal; font-size: 16px; color: var(--text-3); margin-left: 3px; }
+
+.calc-step {
+  margin-top: 22px;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--text);
+  min-height: 22px;
+}
+
+.calc-steps {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  max-width: 300px;
+  margin: 22px auto 0;
+  text-align: left;
+}
+.calc-steps li {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-3);
+  transition: color 0.34s var(--ease-soft);
+}
+.cs-dot {
+  position: relative;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid var(--brd);
+  transition: border-color 0.3s var(--ease-soft), background 0.3s var(--ease-soft);
+}
+.calc-steps li.done { color: var(--text-2); }
+.calc-steps li.done .cs-dot {
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--a1), var(--a2));
+}
+.calc-steps li.done .cs-dot::after {
+  content: "✓";
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 800;
+  color: #0a0b14;
+}
+.calc-steps li.now { color: var(--text); font-weight: 600; }
+.calc-steps li.now .cs-dot {
+  border-color: rgba(129, 140, 248, 0.75);
+  box-shadow: 0 0 0 0 rgba(129, 140, 248, 0.45);
+  animation: calc-pulse 1.25s var(--ease-soft) infinite;
+}
+@keyframes calc-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(129, 140, 248, 0.45); }
+  70%  { box-shadow: 0 0 0 7px rgba(129, 140, 248, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(129, 140, 248, 0); }
+}
+
+/* 窄屏：环与文案都收一点 */
+@media (max-width: 560px) {
+  .calc { min-height: min(520px, 76vh); }
+  .calc-ring-wrap { width: 152px; height: 152px; }
+  .calc-center span { font-size: 38px; }
+  .calc-sweep { inset: 8px; }
+}
+
 /* ---------- 8. 结果页 ---------- */
 .result { padding: clamp(24px, 5vw, 42px); }
 
@@ -757,6 +901,9 @@ body {
 .analysis > *:nth-child(6) { animation-delay: 0.60s; }
 .analysis > *:nth-child(7) { animation-delay: 0.66s; }
 .analysis > *:nth-child(8) { animation-delay: 0.72s; }
+.analysis > *:nth-child(9) { animation-delay: 0.78s; }
+.analysis > *:nth-child(10) { animation-delay: 0.84s; }
+.analysis > *:nth-child(11) { animation-delay: 0.90s; }
 
 /* 四格汇总 */
 .tiles {
@@ -845,6 +992,130 @@ body {
 .avg-delta.eq { background: var(--glass-2); color: var(--text-3); }
 .avg-beat { font-size: 12.5px; color: var(--text-3); }
 .avg-note { margin-top: 12px; font-size: 13px; line-height: 1.7; color: var(--text-2); }
+
+/* 回答稳定度 */
+.stable-inner { padding: 18px; }
+
+.stable-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+.stable-score {
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+  min-width: 78px;
+}
+.stable-score b {
+  font-size: 40px;
+  font-weight: 800;
+  letter-spacing: -2px;
+  line-height: 1;
+  color: var(--text);
+}
+.stable-score i { font-style: normal; font-size: 13px; color: var(--text-3); }
+.stable-verdict { flex: 1 1 auto; min-width: 0; }
+.stable-tag {
+  display: inline-block;
+  margin-bottom: 7px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  padding: 4px 12px;
+  border-radius: 99px;
+  background: var(--glass-2);
+  border: 1px solid var(--brd);
+  color: var(--text-2);
+}
+.stable-text { font-size: 13px; line-height: 1.7; color: var(--text-2); }
+
+.stable-metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  margin-top: 16px;
+}
+.sm-row { display: flex; align-items: center; gap: 12px; }
+.sm-k { width: 62px; flex: none; font-size: 12.5px; color: var(--text-3); }
+.sm-bar {
+  flex: 1;
+  height: 7px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+}
+.sm-bar i {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: 99px;
+  background: linear-gradient(90deg, var(--a1), var(--a2) 70%, var(--a3));
+  transition: width 0.95s var(--ease);
+}
+.sm-v {
+  width: 30px;
+  flex: none;
+  text-align: right;
+  font-size: 13px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.stable-pace { margin-top: 20px; }
+.sp-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+.sp-hint { font-variant-numeric: tabular-nums; }
+.sp-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 52px;
+  padding: 0 2px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+.sp-bars i {
+  flex: 1 1 0;
+  min-width: 2px;
+  height: 0;
+  border-radius: 3px 3px 0 0;
+  background: linear-gradient(180deg, rgba(129, 140, 248, 0.95), rgba(129, 140, 248, 0.4));
+  transition: height 0.6s var(--ease);
+}
+/* 「秒过」的题单独标红：一眼就能看出哪几题没看 */
+.sp-bars i.fast { background: linear-gradient(180deg, rgba(251, 113, 133, 0.95), rgba(251, 113, 133, 0.4)); }
+/* 续答来的题没有用时记录，用一条贴地的暗条占位 */
+.sp-bars i.missing {
+  height: 3px !important;
+  background: rgba(255, 255, 255, 0.12);
+  transition: none;
+}
+
+.stable-note {
+  margin-top: 14px;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--text-2);
+}
+.stable-foot {
+  margin-top: 10px;
+  padding-top: 12px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.07);
+  font-size: 11.5px;
+  line-height: 1.8;
+  color: var(--text-3);
+}
 
 /* 雷达图 */
 .radar-box {

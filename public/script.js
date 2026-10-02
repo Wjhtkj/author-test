@@ -2,8 +2,8 @@
 // 关键安全约束：本文件不得出现 author_answer 或类似变量；答案只由后端计算。
 // 题型：单选（single，单字母）/ 多选（multiple，字母组合，如 'ABC'）。
 //       其中选项固定为「完全符合～完全不符合」的五级题，界面上单独标记为「符合度」。
-// 特性：单选选中后自动跳题；结果页含多维雷达、维度剖析、深度报告、
-//       反作弊惩罚模式与结果长图导出。
+// 特性：单选选中后自动跳题；答完最后一题先过一屏「计算中」动画再出结果；
+//       结果页含多维雷达、维度剖析、回答稳定度、深度报告、反作弊惩罚模式与结果长图导出。
 
 // —— 等级/称号文案（与后端 levelKey 对应）；92+ 即为“可以跟作者配了” ——
 //   注意：各档分界线定义在 functions/api/submit.js 的 tierOf()，这里只放文案；改了那边记得同步注释。
@@ -185,6 +185,9 @@ const state = {
   submitting: false,
   startTime: 0,     // 开始答题的时间戳（用于反作弊的时长判定）
   result: null,     // 最近一次结果，供复制/导出使用
+  // —— 以下两项服务于「回答稳定度」——
+  timings: {},      // { [questionId]: 累计停留毫秒 }（同一题来回修改会累加）
+  qEnteredAt: 0,    // 当前这道题「进入」的时刻，离开时结算进 timings
   // —— 以下两项服务于「本机存档」——
   quizActive: false,     // 是否正处于一局真实作答中（开始页预抽题时为 false，避免误存进度）
   resultQuestions: [],   // 当前展示的结果对应的题集，用于把选项字母还原成文案（回看上次结果时也要能还原）
@@ -194,6 +197,7 @@ const state = {
 const $ = (id) => document.getElementById(id);
 const startScreen = $("start-screen");
 const quizScreen = $("quiz-screen");
+const calcScreen = $("calc-screen");
 const resultScreen = $("result-screen");
 const startBtn = $("start-btn");
 const prevBtn = $("prev-btn");
@@ -239,7 +243,59 @@ function replay(el, cls) {
   el.classList.add(cls);
 }
 
-// 数字滚动（rAF + 三次缓出）
+// —— 统一的动画驱动 ——
+// rAF 是主时钟，但它在「标签页切到后台」「省电模式」「无头/降帧环境」下会被节流甚至完全停摆。
+// 只用 rAF 的话，动画会卡在起点不完成（数字停在 0、进度条停在 0 宽），
+// 更糟的是依赖它 resolve 的 Promise 会永远挂着 —— 用户就卡在计算页看不到结果。
+// 所以另挂一条 setTimeout 看门狗：只有连续 250ms 收不到帧时才由它接管推进。
+// 真实浏览器里帧间隔约 16ms，看门狗几乎不会触发；帧停摆时它保证动画照样跑完。
+const FRAME_STALL_MS = 250;
+// onTick(t) 收到 0→1 的进度；返回 false 表示「先别结束」（用于等网络返回）
+function animate(duration, onTick, onDone) {
+  const t0 = performance.now();
+  let stopped = false;
+  let lastFrame = t0;
+  let dog = null;
+
+  const finish = () => {
+    if (stopped) return;
+    stopped = true;
+    if (dog) clearTimeout(dog);
+    if (onDone) onDone();
+  };
+  const paint = () => {
+    if (stopped) return;
+    const t = Math.min(1, (performance.now() - t0) / duration);
+    if (t >= 1 && onTick(t) !== false) finish();
+    else if (t < 1) onTick(t);
+  };
+  const frame = () => {
+    if (stopped) return;
+    lastFrame = performance.now();
+    paint();
+    if (!stopped) requestAnimationFrame(frame);
+  };
+  const watchdog = () => {
+    if (stopped) return;
+    if (performance.now() - lastFrame > FRAME_STALL_MS) paint(); // 帧停了才兜底
+    dog = setTimeout(watchdog, 90);
+  };
+
+  requestAnimationFrame(frame);
+  dog = setTimeout(watchdog, 90);
+  return { cancel: () => { stopped = true; if (dog) clearTimeout(dog); } };
+}
+
+// 「下一帧再做」——同样不能只靠 rAF：这些调用都是「先设 0、下一帧再设目标值」来触发过渡动画的，
+// 一旦帧不来，元素就会永久停在 0 宽/0 透明度。rAF 为主，setTimeout 兜底。
+function nextFrame(fn) {
+  let called = false;
+  const once = () => { if (called) return; called = true; fn(); };
+  requestAnimationFrame(() => requestAnimationFrame(once));
+  setTimeout(once, 120);
+}
+
+// 数字滚动（三次缓出）
 function countUp(el, target, duration = 950) {
   if (!el) return;
   const to = Number(target) || 0;
@@ -247,15 +303,10 @@ function countUp(el, target, duration = 950) {
     el.textContent = to;
     return;
   }
-  const start = performance.now();
   el.textContent = "0";
-  const tick = (now) => {
-    const p = Math.min(1, (now - start) / duration);
-    const eased = 1 - Math.pow(1 - p, 3);
-    el.textContent = Math.round(to * eased);
-    if (p < 1) requestAnimationFrame(tick);
-  };
-  requestAnimationFrame(tick);
+  animate(duration, (t) => {
+    el.textContent = Math.round(to * (1 - Math.pow(1 - t, 3)));
+  });
 }
 
 function showError(msg) {
@@ -367,12 +418,10 @@ function renderAvg(data) {
   } else {
     avgYouFill.style.width = "0%";
     avgMeanFill.style.width = "0%";
-    requestAnimationFrame(() =>
-      requestAnimationFrame(() => {
-        avgYouFill.style.width = youW;
-        avgMeanFill.style.width = meanW;
-      })
-    );
+    nextFrame(() => {
+      avgYouFill.style.width = youW;
+      avgMeanFill.style.width = meanW;
+    });
   }
 
   // 差值徽标
@@ -460,7 +509,8 @@ function initModeSelector() {
 // 以及 /api/questions 与 /api/submit 本来就返回给你的字段，其中不含 author_answer，
 // 所以即便被本机用户翻出来，也拿不到作者答案。
 // ============================================================
-const SAVE_VERSION = 1; // 存档结构版本：字段有变动时 +1，旧存档会被自动丢弃（不迁移）
+const SAVE_VERSION = 2; // 存档结构版本：字段有变动时 +1，旧存档会被自动丢弃（不迁移）
+                        // v2：进度档新增 timings（每题停留时长），结果档新增 stability（回答稳定度）
 const KEY_PROGRESS = "mq.progress.v1";
 const KEY_RESULT = "mq.lastResult.v1";
 const PROGRESS_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 未完成的进度保留 7 天
@@ -525,6 +575,8 @@ function persistProgress() {
     preset: state.targetPreset,
     current: state.current,
     answers: state.answers,
+    // 每题累计停留时长：续答时带上，结果页的「回答稳定度」才不会只有后半程的数据
+    timings: state.timings,
     // 已用掉的作答时长：续答时用它复原计时，避免把中途离开的几小时算进 durationMs
     elapsedMs: state.startTime ? Date.now() - state.startTime : 0,
     questions: state.questions,
@@ -608,7 +660,7 @@ function renderResume() {
   if (cards.length === 0) return;
 
   // 下一帧再赋宽度，触发进度条生长动画
-  requestAnimationFrame(() => {
+  nextFrame(() => {
     resumeSlot.querySelectorAll(".rc-bar i").forEach((el) => {
       el.style.width = el.dataset.w + "%";
     });
@@ -622,6 +674,9 @@ function resumeQuiz(prog) {
   cancelAdvance();
   state.questions = prog.questions;
   state.answers = { ...prog.answers };
+  // 续答时把上次的每题停留时长带回来（缺失就当作没有记录，稳定度会按覆盖度降权说明）
+  state.timings = { ...(prog.timings || {}) };
+  state.qEnteredAt = 0;
   state.current = Math.min(Math.max(0, Number(prog.current) || 0), prog.questions.length - 1);
   // 只复原「真正用于作答的时间」，中途离开的时长不计入 —— 否则 durationMs 会被撑大，
   // 反作弊的 too-fast 判定就永远不可能命中
@@ -635,6 +690,7 @@ function resumeQuiz(prog) {
   }
   startScreen.classList.add("hidden");
   resultScreen.classList.add("hidden");
+  calcScreen.classList.add("hidden");
   quizScreen.classList.remove("hidden");
   renderQuestion();
 }
@@ -665,6 +721,8 @@ async function startQuiz() {
     }
     sampleIntoState(); // 每轮重新随机抽（题量相近、顺序打乱）
     state.answers = {};
+    state.timings = {};
+    state.qEnteredAt = 0;
     state.current = 0;
     state.result = null;
     state.resultQuestions = [];
@@ -673,6 +731,7 @@ async function startQuiz() {
     state.startTime = Date.now(); // 计时开始（用于反作弊）
     startScreen.classList.add("hidden");
     resultScreen.classList.add("hidden");
+    calcScreen.classList.add("hidden");
     quizScreen.classList.remove("hidden");
     renderQuestion();
   } catch (err) {
@@ -682,6 +741,19 @@ async function startQuiz() {
     startBtn.disabled = false;
     syncStartBtnLabel(); // 而不是写死回「开始测试」——否则会连带抹掉按钮里的箭头图标
   }
+}
+
+// —— 作答计时（回答稳定度的数据源）——
+// 语义是「这道题在屏幕上停留了多久」：进入某题时打点，离开时结算并累加。
+// 用累加而不是覆盖，是为了让「回头改答案」也算进去——那同样是花在这道题上的时间。
+// 越界值直接丢弃：中途切走标签页几小时、或系统时钟跳变，都不该污染稳定度。
+const MAX_DWELL_MS = 30 * 60 * 1000;
+function recordTiming(qid) {
+  if (!qid || !state.qEnteredAt) return;
+  const dt = Date.now() - state.qEnteredAt;
+  state.qEnteredAt = Date.now(); // 先重置起点，这样重复调用不会把同一段时间算两遍
+  if (dt <= 0 || dt > MAX_DWELL_MS) return;
+  state.timings[qid] = (state.timings[qid] || 0) + dt;
 }
 
 // —— 渲染当前题目 ——
@@ -735,6 +807,7 @@ function renderQuestion() {
   }
 
   persistProgress(); // 每次换题都落盘，供中断后回来续答
+  state.qEnteredAt = Date.now(); // 计时起点：从这一刻起，停留时长归这道题
 }
 
 // 轻量刷新选中态与按钮可用性（不重建 DOM，避免每次点选都重放入场动画）
@@ -792,6 +865,7 @@ function scheduleAdvance(delay = 260) {
     const total = state.questions.length;
     const q = state.questions[state.current];
     if (state.answers[q.id] === undefined) return; // 兜底：未作答不前进
+    recordTiming(q.id); // 结算停留时长（含这 260ms 的选中反馈延迟，量级可忽略）
     if (state.current < total - 1) {
       state.current += 1;
       renderQuestion();
@@ -809,6 +883,7 @@ function cancelAdvance() {
 function goPrev() {
   cancelAdvance();
   if (state.current > 0) {
+    recordTiming(state.questions[state.current].id); // 回头也算这道题的停留时长
     state.current -= 1;
     renderQuestion();
   }
@@ -818,12 +893,114 @@ function goNext() {
   const total = state.questions.length;
   const q = state.questions[state.current];
   if (state.answers[q.id] === undefined) return;
+  recordTiming(q.id);
   if (state.current < total - 1) {
     state.current += 1;
     renderQuestion();
   } else {
     submitAnswers();
   }
+}
+
+// ============================================================
+// 计算动画：答完最后一题 → 结果页 之间的过场
+// 动画与 /api/submit 请求「并行」跑：动画一开就发请求，两边都完成才切结果页。
+// 这样服务器快时不会一闪而过，服务器慢时也不至于干等一片空白。
+// ============================================================
+const calcNum = $("calc-num");
+const calcArc = $("calc-arc");
+const calcStep = $("calc-step");
+const calcSteps = $("calc-steps");
+
+const CALC_CIRC = 2 * Math.PI * 52;      // 与 .calc-arc 的 r="52" 对应
+const CALC_DUR = 2500;                   // 正常时长；减少动态效果时压到 700ms
+// 环上百分比与左侧步骤共用同一套节点，避免两处文案各自演化
+const CALC_STEPS = [
+  "读取作答记录",
+  "逐题比对作者偏好",
+  "聚合七个维度",
+  "评估作答稳定度",
+  "生成专属报告",
+];
+const CALC_FLAVOR = [
+  "正在读取你的作答记录…",
+  "把你的答案和作者的口味逐题叠在一起…",
+  "七个维度正在逐个对表…",
+  "顺便看看这份答案稳不稳…",
+  "报告快好了，再等一秒…",
+];
+
+// epoch 是「这轮动画还生效吗」的暗号：中止（如提交失败）时 +1，
+// 旧动画的 rAF 循环下一帧就会发现暗号对不上，自行退出 —— 不用手动 cancelAnimationFrame。
+let calcEpoch = 0;
+let calcPending = false; // 结果数据还没到 → 卡在 99% 慢慢等，避免出现「100% 了却不出结果」
+
+function prepareCalcSteps() {
+  if (!calcSteps || calcSteps.children.length === CALC_STEPS.length) return;
+  calcSteps.innerHTML = CALC_STEPS.map(
+    (s) => `<li><span class="cs-dot" aria-hidden="true"></span>${escapeHtml(s)}</li>`
+  ).join("");
+}
+
+// 开始动画；返回的 Promise 在「动画放完 且 数据已到」后 resolve
+let calcAbort = null; // 中止用：停掉动画循环并让上面那个 Promise 落地，避免它永远挂着
+function runCalculating() {
+  prepareCalcSteps();
+  const my = ++calcEpoch;
+  calcPending = true;
+  const dur = reduceMotion() ? 700 : CALC_DUR;
+  const li = calcSteps ? [...calcSteps.children] : [];
+
+  if (calcArc) calcArc.style.strokeDashoffset = String(CALC_CIRC);
+  if (calcNum) calcNum.textContent = "0";
+  if (calcStep) calcStep.textContent = CALC_FLAVOR[0];
+  li.forEach((el) => el.classList.remove("done", "now"));
+  calcScreen.classList.remove("hidden");
+
+  let lastStep = -1;
+  return new Promise((resolve) => {
+    const anim = animate(
+      dur,
+      (t) => {
+        if (my !== calcEpoch) { resolve(); return true; } // 已被中止 → 不再画，直接收工
+        // 缓出：开场涨得快、结尾慢慢爬到 100，视觉上更像「真的在算」
+        const pct = t >= 1 && calcPending ? 99 : Math.round((1 - Math.pow(1 - t, 2.2)) * 100);
+        if (calcNum) calcNum.textContent = pct;
+        if (calcArc) calcArc.style.strokeDashoffset = String(CALC_CIRC * (1 - pct / 100));
+
+        const idx = Math.min(CALC_STEPS.length - 1, Math.floor(t * CALC_STEPS.length));
+        if (idx !== lastStep) {
+          lastStep = idx;
+          if (calcStep) calcStep.textContent = CALC_FLAVOR[idx];
+          li.forEach((el, i) => {
+            el.classList.toggle("done", i < idx);
+            el.classList.toggle("now", i === idx);
+          });
+        }
+        return !calcPending; // 数据没到 → 返回 false，停在 99% 继续等
+      },
+      () => {
+        li.forEach((el) => { el.classList.remove("now"); el.classList.add("done"); });
+        if (calcNum) calcNum.textContent = "100";
+        if (calcArc) calcArc.style.strokeDashoffset = "0";
+        setTimeout(resolve, 200); // 让 100% 停一下再切页，否则会显得突兀
+      }
+    );
+    calcAbort = () => { anim.cancel(); resolve(); };
+  });
+}
+
+// 数据到手 —— 解除「卡在 99%」的门闩
+function calcDataReady() {
+  calcPending = false;
+}
+
+// 中止动画并收起计算页（提交失败时用）
+function abortCalculating() {
+  calcEpoch += 1;
+  calcPending = false;
+  calcScreen.classList.add("hidden");
+  if (calcAbort) { const f = calcAbort; calcAbort = null; f(); }
 }
 
 // —— 提交答案，获取结果 ——
@@ -835,12 +1012,19 @@ async function submitAnswers() {
   nextBtn.disabled = true;
   nextBtn.textContent = "计算中…";
 
+  // 结算最后一题的停留时长（前面每题都在「离开」时结算过了）
+  recordTiming(state.questions[state.current].id);
+
   const answers = state.questions.map((q) => ({
     questionId: q.id,
     userAnswer: state.answers[q.id] || "",
   }));
 
   const durationMs = state.startTime ? Date.now() - state.startTime : 0;
+
+  // 计算动画与网络请求并行：先起动画（用户立刻看到反馈），再发请求
+  quizScreen.classList.add("hidden");
+  const anim = runCalculating();
 
   try {
     const res = await fetch("/api/submit", {
@@ -850,13 +1034,23 @@ async function submitAnswers() {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "提交失败");
+
+    // 回答稳定度完全在本机算 —— 不新增任何上传字段，只把结果挂进响应对象，
+    // 这样它会被 saveLastResult 一并存档，「查看上次结果」时也能原样看到。
+    data.stability = computeStability(state.questions, state.answers, state.timings);
+
     // 本局结束：撤掉进度存档、改存这次结果。
     // 顺序不能反 —— saveLastResult 要读 renderResult 里刚设好的 state.resultQuestions。
     state.quizActive = false;
     clearProgress();
+
+    calcDataReady();  // 门闩一开，动画自己会补完最后一段并 resolve
+    await anim;
     renderResult(data);
     saveLastResult(data);
   } catch (err) {
+    abortCalculating(); // 收起计算页，把用户放回答题页，别让他卡在过场里
+    quizScreen.classList.remove("hidden");
     showError("提交失败：" + err.message);
     nextBtn.disabled = false;
     nextBtn.textContent = "查看结果";
@@ -890,6 +1084,202 @@ function dimComment(dim, p) {
   return dim.lo;
 }
 
+// ============================================================
+// 回答稳定度：用「作答行为」判断这份答案可不可信
+// 三个互不重叠的轴：
+//   节奏平稳 —— 每题用时的离散程度（忽快忽慢 = 没在读）
+//   作答投入 —— 平均每题耗时（连点一定落在这条上）
+//   选择变化 —— 选项使用广度 + 超长连击（一路同一个选项）
+// 只看行为，不评价答案对错；全部在本机算，不上传任何新字段。
+// 注意 39 道符合度题里，「跟作者像」的人本来就该多选「完全符合」，
+// 所以对「选项集中」的判定放得很宽（≥10 连击才扣分），避免把高分用户误伤成敷衍。
+// ============================================================
+function computeStability(questions, answers, timings) {
+  const qs = (questions || []).filter((q) => answers[q.id] !== undefined);
+  const total = qs.length;
+  const times = qs
+    .map((q) => timings[q.id])
+    .filter((t) => typeof t === "number" && t > 0);
+  const n = times.length;
+  const mean = n ? times.reduce((a, b) => a + b, 0) / n : 0;
+  const meanSec = mean / 1000;
+  const coverage = total ? n / total : 0;
+
+  // —— 1) 节奏平稳：变异系数 ——
+  //  掐掉最快/最慢各一道再算（n≥8 时）：偶尔一道题走神不该把整组判死。
+  let cv = 0;
+  if (n >= 3) {
+    const sorted = [...times].sort((a, b) => a - b);
+    const core = n >= 8 ? sorted.slice(1, -1) : sorted;
+    const cm = core.reduce((a, b) => a + b, 0) / core.length;
+    const sd = Math.sqrt(core.reduce((a, t) => a + (t - cm) ** 2, 0) / core.length);
+    cv = cm > 0 ? sd / cm : 0;
+  }
+  let rhythm = n < 3 ? 60 : Math.round(100 * Math.exp(-Math.max(0, cv - 0.3) * 1.6));
+  // 「匀速狂点」的离散度天然很低，不能因此拿满分 —— 速度太快的组直接压低上限
+  if (n >= 3 && meanSec < 1.2) rhythm = Math.min(rhythm, 55);
+
+  // —— 2) 作答投入：平均每题耗时（分段线性）——
+  const PACE_PTS = [[0.4, 0], [1.0, 30], [1.6, 60], [2.4, 82], [3.5, 94], [5, 100]];
+  const lerp = (x) => {
+    if (x <= PACE_PTS[0][0]) return PACE_PTS[0][1];
+    for (let i = 1; i < PACE_PTS.length; i++) {
+      const [x1, y1] = PACE_PTS[i];
+      if (x <= x1) {
+        const [x0, y0] = PACE_PTS[i - 1];
+        return y0 + ((x - x0) / (x1 - x0)) * (y1 - y0);
+      }
+    }
+    return PACE_PTS[PACE_PTS.length - 1][1];
+  };
+  const rushCount = times.filter((t) => t < 1000).length;
+  const rushRate = n ? rushCount / n : 0;
+  // 「秒过」的题按比例再打一次折 —— 平均 2 秒但有 14 题是 0.3 秒，同样是没读
+  let pace = n < 3 ? 60 : Math.round(lerp(meanSec) * (1 - rushRate * 0.6));
+
+  // —— 3) 选择变化：选项使用广度 + 最长连击 ——
+  const seq = qs.map((q) => answers[q.id]);
+  let maxRun = 0, run = 0, prev = null;
+  seq.forEach((a) => {
+    run = a === prev ? run + 1 : 1;
+    prev = a;
+    if (run > maxRun) maxRun = run;
+  });
+  const distinct = new Set(seq).size;
+  const distinctRate = total ? distinct / total : 1;
+  // 全程同一个答案：题量多寡都一样，只可能是没在看题（与后端 straight-line 判定口径一致）
+  const mono = total >= 5 && distinct === 1;
+  // 「答案用得很单调」不能单独当作敷衍的证据：39 道符合度题里，跟作者像的人本来就该
+  // 一路选「完全符合」。所以低分散度必须配上「快」才算可疑，否则会误伤真正的高分用户。
+  const monoTone = total >= 12 && distinctRate < 0.25 && meanSec < 2;
+  let variety = 100;
+  if (mono) {
+    variety = 15;
+  } else {
+    if (maxRun >= 8) variety -= Math.min(60, (maxRun - 7) * 8);           // 连击太长
+    if (monoTone) variety -= Math.min(45, (0.25 - distinctRate) * 180);   // 又快又单调
+  }
+  variety = total < 5 ? 60 : Math.max(15, Math.round(variety));
+
+  let score = Math.round(rhythm * 0.3 + pace * 0.4 + variety * 0.3);
+  // 硬顶一：平均每题不到 1 秒，就是没在读 —— 单项分再好看，总分也不该好看。
+  // 这两条阈值取得很保守（读一句中文陈述总得花上一秒），不会误伤正常快答的人。
+  if (n >= 3) {
+    if (meanSec < 0.6) score = Math.min(score, 20);
+    else if (meanSec < 0.9) score = Math.min(score, 38);
+  }
+  // 硬顶二：全程一个答案，或八成以上都选同一项 —— 每个都答对是不可能的，多半是连点到底。
+  // 节奏和用时都可能「看起来很认真」（慢慢点同一个选项也是慢慢点），所以必须单独设顶，
+  // 否则「节奏 100 + 投入 90」会把这种最典型的敷衍托到 70 分以上。
+  if (mono) score = Math.min(score, 30);
+  else if (total >= 10 && maxRun >= Math.ceil(total * 0.8)) score = Math.min(score, 48);
+
+  // —— 可疑信号（只列真正命中的，最多三条）——
+  // 「秒过」要够多才列出来：只快了一道题很正常（比如第一题已知套路），
+  // 把它当信号会和「稳如老狗」的评级自相矛盾。
+  const signals = [];
+  if (rushCount >= 2 && rushRate >= 0.1) signals.push({ w: 1, t: `有 ${rushCount} 题在 1 秒内过掉` });
+  if (maxRun >= 8) signals.push({ w: 0.95, t: `最长连续 ${maxRun} 题选了同一个选项` });
+  if (distinct === 1) signals.push({ w: 0.98, t: "所有题都选了同一个答案" });
+  else if (monoTone) signals.push({ w: 0.75, t: `又答得快、又只用了 ${distinct} 种答案` });
+  if (n >= 3 && cv >= 1.2) signals.push({ w: 0.7, t: `作答节奏忽快忽慢（离散度 ${cv.toFixed(1)}）` });
+  signals.sort((a, b) => b.w - a.w);
+
+  // 数据完整性说明 —— 这不是「可疑」，而是「仅供参考」：
+  // 每道题在离开时都会结算用时，所以正常一整局下来覆盖率必然是 100%；
+  // 只有「中途在某题上停留超过 30 分钟」（视为走神，用时被丢弃）才会缺。
+  // 缺得越多，节奏与投入两项的参考价值越低，所以单独说明，而不是混进可疑信号里。
+  const caveat = total >= 5 && n < total
+    ? `另有 ${total - n} 题没有用时记录（中途离开过），不计入节奏与投入，这两项仅供参考。`
+    : "";
+
+  const GRADES = [
+    [85, "稳如老狗", "#4ade80", "节奏、用时、选择分布都很自然，这份答案没什么可挑的。"],
+    [70, "踏实作答", "#86efac", "整体是认真在答的，个别题的节奏有点跳，不影响可信度。"],
+    [55, "略有起伏", "#fbbf24", "能看出在作答，但节奏偏快、或者选择有点单调。"],
+    [40, "有点敷衍", "#fb923c", "速度和节奏已经贴近「随手点」的区间了。"],
+    [25, "相当可疑", "#fb7185", "多项指标都指向「没怎么看题」，作者有权怀疑你。"],
+    [-1, "基本是乱点", "#ef4444", "这个节奏配上这个选择分布，很像是一路点到底。"],
+  ];
+  const g = GRADES.find(([min]) => score >= min);
+
+  return {
+    score, rhythm, pace, variety,
+    cv, meanSec, coverage, rushCount, maxRun, distinct, total, timed: n,
+    tag: g[1], color: g[2], text: g[3],
+    signals: signals.slice(0, 3).map((s) => s.t),
+    caveat,
+    perQuestion: qs.map((q) => ({
+      id: q.id,
+      ms: typeof timings[q.id] === "number" ? timings[q.id] : null,
+    })),
+  };
+}
+
+// —— 渲染「回答稳定度」模块 ——
+function renderStability(data) {
+  const box = $("stable-box");
+  if (!box) return;
+  const st = data.stability;
+  // 缺少数据（例如站龄很老的存档）就整块隐藏，不要留一个 "--" 的壳
+  if (!st) { box.classList.add("hidden"); return; }
+  box.classList.remove("hidden");
+
+  const num = $("stable-num");
+  num.textContent = st.score;
+  num.style.color = st.color;
+
+  const tag = $("stable-tag");
+  tag.textContent = st.tag;
+  tag.style.color = st.color;
+  tag.style.borderColor = st.color;
+
+  $("stable-text").textContent = st.text;
+
+  const rows = [
+    ["节奏平稳", st.rhythm, "每题用时的离散程度"],
+    ["作答投入", st.pace, "平均每题耗时"],
+    ["选择变化", st.variety, "选项使用广度与连击长度"],
+  ];
+  const mBox = $("stable-metrics");
+  mBox.innerHTML = rows
+    .map(
+      ([k, v, hint]) =>
+        `<div class="sm-row" title="${escapeHtml(hint)}">
+           <span class="sm-k">${k}</span>
+           <div class="sm-bar"><i data-w="${v}"></i></div>
+           <span class="sm-v">${v}</span>
+         </div>`
+    )
+    .join("");
+  nextFrame(() => {
+    mBox.querySelectorAll(".sm-bar i").forEach((el) => { el.style.width = el.dataset.w + "%"; });
+  });
+  // 每题用时柱：高度按时长归一到最高一条；不足 1 秒的标红，让「没读的题」一眼可见
+  const bars = $("stable-bars");
+  const all = st.perQuestion.map((x) => x.ms).filter((x) => typeof x === "number");
+  const maxMs = Math.max(1, ...(all.length ? all : [1]));
+  bars.innerHTML = st.perQuestion
+    .map((x, i) => {
+      if (typeof x.ms !== "number") {
+        return `<i class="missing" title="第 ${i + 1} 题：没有用时记录"></i>`;
+      }
+      const h = Math.max(8, Math.round((x.ms / maxMs) * 100));
+      const fast = x.ms < 1000;
+      return `<i class="${fast ? "fast" : ""}" style="height:${h}%"
+                 title="第 ${i + 1} 题：${(x.ms / 1000).toFixed(1)} 秒"></i>`;
+    })
+    .join("");
+
+  $("stable-pace-hint").textContent =
+    `平均 ${st.meanSec.toFixed(1)} 秒/题` + (st.rushCount ? ` · ${st.rushCount} 题偏快` : "");
+
+  const note = st.signals.length
+    ? "可疑信号：" + st.signals.join("；") + "。"
+    : "没有发现明显的敷衍迹象——作答节奏和选择分布都挺自然。";
+  $("stable-note").textContent = st.caveat ? note + " " + st.caveat : note;
+}
+
 // —— 更新分数圆环（SVG stroke-dashoffset，带绘制动画）——
 function setRing(percent, color) {
   const R = 52;
@@ -907,7 +1297,7 @@ function setRing(percent, color) {
   ringFg.style.strokeDashoffset = circ.toFixed(1);
   void ringFg.getBoundingClientRect();
   ringFg.style.transition = "";
-  requestAnimationFrame(() => {
+  nextFrame(() => {
     ringFg.style.strokeDashoffset = (circ * (1 - pct / 100)).toFixed(1);
   });
 }
@@ -917,6 +1307,7 @@ function setRing(percent, color) {
 function renderResult(data, questions) {
   startScreen.classList.add("hidden");
   quizScreen.classList.add("hidden");
+  calcScreen.classList.add("hidden"); // 从计算页切过来时把它收起，避免两屏同时可见
   resultScreen.classList.remove("hidden");
 
   // 结果页要把「选项字母」还原成选项文案，所以必须知道当时用的是哪套题。
@@ -982,6 +1373,7 @@ function renderReal(data, tier, dims, best, worst) {
   $("sum-worst").textContent = `${worst.name} ${worst.percent}%`;
 
   renderAvg(data);
+  renderStability(data);
 
   renderRadar(dims);
   $("radar-summary").textContent =
@@ -1060,17 +1452,21 @@ function renderRadar(dims) {
 
   axes.forEach((t) => { t.style.opacity = "0"; });
   g.style.transform = "scale(0)";
-  const dur = 950;
-  const t0 = performance.now();
-  const step = (now) => {
-    const p = Math.min(1, (now - t0) / dur);
-    const e = 1 - Math.pow(1 - p, 3);
-    g.style.transform = `scale(${e})`;
-    const ao = Math.max(0, (e - 0.6) / 0.4).toFixed(2);
-    axes.forEach((t) => { t.style.opacity = ao; });
-    if (p < 1) requestAnimationFrame(step);
-  };
-  requestAnimationFrame(step);
+  animate(
+    950,
+    (p) => {
+      const e = 1 - Math.pow(1 - p, 3);
+      g.style.transform = `scale(${e})`;
+      const ao = Math.max(0, (e - 0.6) / 0.4).toFixed(2);
+      axes.forEach((t) => { t.style.opacity = ao; });
+    },
+    // 收尾兜底：万一动画被中途掐断（切后台/降帧），也必须落到终态，
+    // 否则雷达多边形会永远停在 scale(0) —— 内容在 DOM 里却看不见
+    () => {
+      g.style.transform = "scale(1)";
+      axes.forEach((t) => { t.style.opacity = "1"; });
+    }
+  );
 }
 
 // —— 维度进度条列表（错峰入场 + 生长动画）——
@@ -1094,7 +1490,7 @@ function renderDimensionList(dims) {
     fills.push([row.querySelector(".dim-fill"), d.percent]);
   });
   // 下一帧再赋宽度，触发进度条生长
-  requestAnimationFrame(() => {
+  nextFrame(() => {
     fills.forEach(([el, p]) => { el.style.width = p + "%"; });
   });
 }
@@ -1144,6 +1540,11 @@ function buildResultText() {
     `最强同频：${best.name} ${best.percent}%`,
     `最离谱分歧：${worst.name} ${worst.percent}%`,
   ];
+  // 回答稳定度（本地计算的，老存档可能没有）
+  const st = data.stability;
+  if (st) {
+    lines.push(``, `回答稳定度：${st.score} 分（${st.tag}）· 平均 ${st.meanSec.toFixed(1)} 秒/题`);
+  }
   // 平均分对比（有数据时才写入）
   const s = data.stats;
   if (s && s.count > 0 && s.average != null) {
@@ -1219,9 +1620,12 @@ async function downloadResult() {
 function restart() {
   clearError();
   cancelAdvance();
+  abortCalculating();
   state.quizActive = false;
   state.result = null;
   state.resultQuestions = [];
+  state.timings = {};
+  state.qEnteredAt = 0;
   resultScreen.classList.add("hidden");
   startScreen.classList.remove("hidden");
   sampleIntoState(); // 重新抽样，开始页题量保持稳定（实际题集每轮不同）

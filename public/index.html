@@ -82,6 +82,31 @@
       </div>
     </section>
 
+    <!-- ============ 计算中（答完最后一题 → 结果页 之间的过场）============ -->
+    <!-- 动画与 /api/submit 请求并行：两边都完成才切结果页，服务器快时不闪、慢时也不空等 -->
+    <section id="calc-screen" class="screen glass calc hidden" role="status" aria-live="polite">
+      <span class="calc-label">ANALYSING</span>
+
+      <div class="calc-ring-wrap">
+        <span class="calc-sweep" aria-hidden="true"></span>
+        <svg class="calc-ring" viewBox="0 0 120 120" aria-hidden="true">
+          <circle class="calc-track" cx="60" cy="60" r="52"></circle>
+          <circle id="calc-arc" class="calc-arc" cx="60" cy="60" r="52"></circle>
+        </svg>
+        <div class="calc-center"><span id="calc-num">0</span><i>%</i></div>
+      </div>
+
+      <p id="calc-step" class="calc-step">正在读取你的作答记录…</p>
+
+      <ul id="calc-steps" class="calc-steps">
+        <li><span class="cs-dot" aria-hidden="true"></span>读取作答记录</li>
+        <li><span class="cs-dot" aria-hidden="true"></span>逐题比对作者偏好</li>
+        <li><span class="cs-dot" aria-hidden="true"></span>聚合七个维度</li>
+        <li><span class="cs-dot" aria-hidden="true"></span>评估作答稳定度</li>
+        <li><span class="cs-dot" aria-hidden="true"></span>生成专属报告</li>
+      </ul>
+    </section>
+
     <!-- ============ 结果页 ============ -->
     <section id="result-screen" class="screen glass result hidden">
       <p class="result-label">你的匹配度</p>
@@ -135,6 +160,32 @@
               <span class="avg-beat" id="avg-beat">--</span>
             </div>
             <p class="avg-note" id="avg-note"></p>
+          </div>
+        </div>
+
+        <div id="stable-box">
+          <h3 class="sec-title">回答稳定度</h3>
+          <div class="panel stable-inner">
+            <div class="stable-head">
+              <div class="stable-score"><b id="stable-num">--</b><i>分</i></div>
+              <div class="stable-verdict">
+                <span class="stable-tag" id="stable-tag">--</span>
+                <p class="stable-text" id="stable-text"></p>
+              </div>
+            </div>
+
+            <div class="stable-metrics" id="stable-metrics"></div>
+
+            <div class="stable-pace">
+              <div class="sp-head">
+                <span>每题用时</span>
+                <span class="sp-hint" id="stable-pace-hint">--</span>
+              </div>
+              <div class="sp-bars" id="stable-bars"></div>
+            </div>
+
+            <p class="stable-note" id="stable-note"></p>
+            <p class="stable-foot">稳定度只看作答行为（节奏、用时、选择变化），不评价答案对错；全部在你的浏览器里算，不会上传。</p>
           </div>
         </div>
 
