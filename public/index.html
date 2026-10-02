@@ -3,13 +3,30 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#06070e" />
+  <meta name="theme-color" content="#05060d" />
   <meta name="description" content="58 道题，测测你和作者到底是不是一路人。" />
   <title>你与作者的匹配度测试</title>
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
-  <!-- 背景：极光光晕 + 噪点 -->
+  <!-- 液态玻璃的折射滤镜定义，由 CSS 的 filter: url(#lg-refract) 引用。
+       幅度与波长要一起调：基频越低（波长越长）而 scale 越大，位移就会从「细波纹」
+       变成「放大镜」，把边缘那条亮棱揉断成一节一节 —— 很脏。
+       宽高为 0、绝对定位：不占位、不可见，但不能 display:none（那样滤镜会失效）。 -->
+  <svg class="lg-defs" aria-hidden="true" focusable="false" width="0" height="0">
+    <defs>
+      <filter id="lg-refract" x="-14%" y="-14%" width="128%" height="128%"
+              color-interpolation-filters="sRGB">
+        <feTurbulence type="fractalNoise" baseFrequency="0.013 0.017" numOctaves="2"
+                      seed="7" result="noise" />
+        <feGaussianBlur in="noise" stdDeviation="1.6" result="soft" />
+        <feDisplacementMap in="SourceGraphic" in2="soft" scale="16"
+                           xChannelSelector="R" yChannelSelector="G" />
+      </filter>
+    </defs>
+  </svg>
+
+  <!-- 背景：极光光晕 + 缓慢旋转的彩色光带 + 噪点 -->
   <div class="bg" aria-hidden="true">
     <span class="orb orb-a"></span>
     <span class="orb orb-b"></span>
@@ -21,6 +38,7 @@
 
     <!-- ============ 开始页 ============ -->
     <section id="start-screen" class="screen glass hero">
+      <span class="lg-sheen" aria-hidden="true"></span>
       <span class="eyebrow">MATCHING QUIZ&nbsp;&nbsp;·&nbsp;&nbsp;58 题题库</span>
 
       <h1 class="hero-title">
@@ -63,6 +81,7 @@
 
     <!-- ============ 答题页 ============ -->
     <section id="quiz-screen" class="screen glass quiz hidden">
+      <span class="lg-sheen" aria-hidden="true"></span>
       <div class="quiz-top">
         <span class="brand">匹配度测试</span>
         <span id="q-type" class="q-type"></span>
@@ -85,6 +104,7 @@
     <!-- ============ 计算中（答完最后一题 → 结果页 之间的过场）============ -->
     <!-- 动画与 /api/submit 请求并行：两边都完成才切结果页，服务器快时不闪、慢时也不空等 -->
     <section id="calc-screen" class="screen glass calc hidden" role="status" aria-live="polite">
+      <span class="lg-sheen" aria-hidden="true"></span>
       <span class="calc-label">ANALYSING</span>
 
       <div class="calc-ring-wrap">
@@ -109,6 +129,7 @@
 
     <!-- ============ 结果页 ============ -->
     <section id="result-screen" class="screen glass result hidden">
+      <span class="lg-sheen" aria-hidden="true"></span>
       <p class="result-label">你的匹配度</p>
 
       <div class="ring-wrap">

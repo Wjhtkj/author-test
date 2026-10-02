@@ -3,7 +3,8 @@
 // 题型：单选（single，单字母）/ 多选（multiple，字母组合，如 'ABC'）。
 //       其中选项固定为「完全符合～完全不符合」的五级题，界面上单独标记为「符合度」。
 // 特性：单选选中后自动跳题；答完最后一题先过一屏「计算中」动画再出结果；
-//       结果页含多维雷达、维度剖析、回答稳定度、深度报告、反作弊惩罚模式与结果长图导出。
+//       结果页含多维雷达、维度剖析、回答稳定度、深度报告、反作弊惩罚模式与结果长图导出；
+//       液态玻璃的镜面高光跟随指针（只改 CSS 变量，见 initLiquidSheen）。
 
 // —— 等级/称号文案（与后端 levelKey 对应）；92+ 即为“可以跟作者配了” ——
 //   注意：各档分界线定义在 functions/api/submit.js 的 tierOf()，这里只放文案；改了那边记得同步注释。
@@ -1678,6 +1679,52 @@ function restart() {
   renderResume();  // 此时「未完成的测试」应已消失，只剩「查看上次结果」
   loadGlobalStats(); // 刷新平均分（含刚才这一次提交）
 }
+
+// —— 液态玻璃：让玻璃表面的镜面高光跟着指针走 ——
+// 只改 CSS 变量（--mx / --my），完全不碰动画时钟：高光本身是「背景渐变的位置」，
+// 由样式引擎负责合成，没有逐帧插值，所以不需要 animate()；指针不动时开销为零。
+// 只在「精确指针 + 未要求减少动态效果」时启用；触屏 / 键盘 / reduced-motion 下
+// 高光固定停在顶部中央（CSS 里的初始值），不追指针也不报错。
+(function initLiquidSheen() {
+  const fine = window.matchMedia
+    && window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+  if (!fine || reduceMotion()) return;
+
+  let lastKey = "";
+  const move = (el, x, y) => {
+    const r = el.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    const px = Math.min(100, Math.max(0, ((x - r.left) / r.width) * 100));
+    const py = Math.min(100, Math.max(0, ((y - r.top) / r.height) * 100));
+    const key = `${el.id}|${px.toFixed(1)}|${py.toFixed(1)}`;
+    if (key === lastKey) return; // 同一格内的连续移动不重复写样式
+    lastKey = key;
+    el.style.setProperty("--mx", `${px.toFixed(1)}%`);
+    el.style.setProperty("--my", `${py.toFixed(1)}%`);
+  };
+  const panelOf = (e) => {
+    const t = e.target;
+    if (!(t instanceof Element)) return null;
+    const el = t.closest(".glass");
+    return el && !el.classList.contains("hidden") ? el : null;
+  };
+
+  document.addEventListener("pointermove", (e) => {
+    const el = panelOf(e);
+    if (el) move(el, e.clientX, e.clientY);
+  }, { passive: true });
+
+  // 指针离开这块玻璃后把内侧属性摘掉，让高光回到 CSS 里的默认位置（左上角）。
+  // 刻意不在这里写死一组「复位值」：默认位置属于样式的事，改样式时不必同步改 JS。
+  document.addEventListener("pointerout", (e) => {
+    const el = panelOf(e);
+    if (!el) return;
+    const to = e.relatedTarget;
+    if (to instanceof Element && el.contains(to)) return; // 只是移到玻璃内部的子元素，不算离开
+    el.style.removeProperty("--mx");
+    el.style.removeProperty("--my");
+  }, { passive: true });
+})();
 
 // —— 事件绑定 ——
 startBtn.addEventListener("click", startQuiz);

@@ -1,22 +1,40 @@
 /* ============================================================
-   你与作者的匹配度测试 · 极简玻璃拟态（Minimal Glassmorphism）
-   —— 深空极光底 · 毛玻璃面板 · 克制留白 · 顺滑动效
+   你与作者的匹配度测试 · 液态玻璃（Liquid Glass）
+   —— 深空极光底 · 折射玻璃面板 · 镜面高光 · 连续曲率圆角
+   与「极简玻璃拟态」的区别（也是这次改造的全部内容）：
+     1) 折射：面板后的极光被 SVG 位移滤镜轻轻弯折，玻璃才像「有厚度」而不只是磨砂；
+     2) 厚度：四边内阴影造出棱线，上沿受光、下沿压暗、底部溢出靛色回光；
+     3) 镜面：一层跟随指针的柔光高光铺在玻璃表面（触屏 / 减少动效时固定居中）；
+     4) 液态：边缘一圈虹彩折射环 + 缓慢漂移的内部光斑，画面是「流的」不是「静止的」。
    全部资源本地化，无任何外部 CDN。
    ============================================================ */
 
 /* ---------- 1. 设计令牌 ---------- */
 :root {
   /* 底色 */
-  --bg: #06070e;
-  --bg-2: #0b0d18;
+  --bg: #05060d;
+  --bg-2: #0a0c17;
 
-  /* 玻璃 */
-  --glass: rgba(255, 255, 255, 0.055);
-  --glass-2: rgba(255, 255, 255, 0.035);
-  --glass-3: rgba(255, 255, 255, 0.028);
-  --brd: rgba(255, 255, 255, 0.10);
-  --brd-hi: rgba(255, 255, 255, 0.20);
-  --blur: 22px;
+  /* 玻璃：液态玻璃的「厚」靠的是边缘折射、厚度阴影与镜面高光，
+     不是靠把整块面板调亮 —— 面板一白，里面的层次就全糊了（第一版就栽在这儿）。
+     所以本体透明度只比原来的极简玻璃略微上浮一点。 */
+  --glass: rgba(255, 255, 255, 0.052);
+  --glass-2: rgba(255, 255, 255, 0.042);
+  --glass-3: rgba(255, 255, 255, 0.032);
+  --brd: rgba(255, 255, 255, 0.13);
+  --brd-hi: rgba(255, 255, 255, 0.28);
+  --blur: 26px;
+
+  /* 液态玻璃专用 */
+  --lg-sat: 172%;
+  --lg-lift: 1;                           /* 刻意不提亮：见上面 --glass 的说明 */
+  --edge: rgba(255, 255, 255, 0.32);      /* 上沿受光的亮边 */
+  --edge-dim: rgba(255, 255, 255, 0.06);  /* 下沿压暗的暗边 */
+  /* 镜面高光的位置。默认停在左上角 —— 光从左上打过来最自然。
+     不能把初始值放在 y=0 正中央：那块高光只有下半截落在面板里，看上去像被削掉了。
+     指针进入面板后由 script.js 覆写这两个变量跟随指针。 */
+  --mx: 24%;
+  --my: 6%;
 
   /* 文字 */
   --text: #eaeefb;
@@ -30,11 +48,11 @@
   --ok: #4ade80;
   --bad: #fb7185;
 
-  /* 形状 */
-  --r-xl: 30px;
-  --r-lg: 22px;
-  --r-md: 15px;
-  --r-sm: 11px;
+  /* 形状：连续曲率（squircle 感）—— 圆角比原来更大、层次拉得更开 */
+  --r-xl: 36px;
+  --r-lg: 27px;
+  --r-md: 19px;
+  --r-sm: 13px;
 
   /* 动效曲线 */
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
@@ -75,10 +93,35 @@ body {
   content: "";
   position: absolute; inset: 0;
   background:
-    radial-gradient(1200px 700px at 50% -12%, rgba(129, 140, 248, 0.16), transparent 60%),
-    radial-gradient(900px 620px at 88% 96%, rgba(34, 211, 238, 0.10), transparent 62%),
-    radial-gradient(880px 700px at 6% 78%, rgba(192, 132, 252, 0.12), transparent 64%),
+    radial-gradient(1200px 700px at 50% -12%, rgba(129, 140, 248, 0.165), transparent 60%),
+    radial-gradient(900px 620px at 88% 96%, rgba(34, 211, 238, 0.104), transparent 62%),
+    radial-gradient(880px 700px at 6% 78%, rgba(192, 132, 252, 0.122), transparent 64%),
     linear-gradient(180deg, var(--bg) 0%, var(--bg-2) 55%, var(--bg) 100%);
+}
+
+/* 缓慢旋转的彩色光带。玻璃背后必须有「会动的内容」，折射才看得出是液态的 ——
+   这块转起来之后，透过玻璃看到的极光是流动的，而不是一张静态磨砂图。
+   但幅度要压住：它同样会透过玻璃抬高整块面板的亮度。 */
+.bg::after {
+  content: "";
+  position: absolute;
+  inset: -30%;
+  background: conic-gradient(from 0deg at 50% 50%,
+    transparent 0deg,
+    rgba(129, 140, 248, 0.12) 44deg,
+    transparent 98deg,
+    rgba(34, 211, 238, 0.10) 160deg,
+    transparent 216deg,
+    rgba(192, 132, 252, 0.12) 302deg,
+    transparent 360deg);
+  filter: blur(70px);
+  opacity: 0.4;
+  will-change: transform;
+  animation: lg-swirl 54s linear infinite;
+}
+@keyframes lg-swirl {
+  from { transform: rotate(0deg) scale(1.05); }
+  to   { transform: rotate(360deg) scale(1.05); }
 }
 
 .orb {
@@ -86,7 +129,7 @@ body {
   display: block;
   border-radius: 50%;
   filter: blur(90px);
-  opacity: 0.5;
+  opacity: 0.44;
   will-change: transform;
 }
 .orb-a {
@@ -97,13 +140,13 @@ body {
 .orb-b {
   width: 38vmax; height: 38vmax; bottom: -14vmax; right: -8vmax;
   background: radial-gradient(circle at 60% 40%, #22d3ee, transparent 68%);
-  opacity: 0.4;
+  opacity: 0.34;
   animation: drift-b 42s var(--ease-soft) infinite alternate;
 }
 .orb-c {
   width: 34vmax; height: 34vmax; top: 38%; left: 52%;
   background: radial-gradient(circle at 50% 50%, #c084fc, transparent 68%);
-  opacity: 0.34;
+  opacity: 0.29;
   animation: drift-c 50s var(--ease-soft) infinite alternate;
 }
 @keyframes drift-a {
@@ -132,19 +175,38 @@ body {
 
 .glass {
   position: relative;
-  /* 多层叠加：对角微光 + 半透明玻璃底，更通透有层次 */
+  /* 主体材质：斜向受光渐变（左上受光、中段最通透、右下反过来再受一点光）+ 半透明玻璃底。
+     注意整片的白都很轻：玻璃本体一旦发白，面板里的卡片、进度条、文字层次会全部糊掉。 */
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.035) 36%, rgba(255, 255, 255, 0.012) 100%),
+    linear-gradient(152deg,
+      rgba(255, 255, 255, 0.105) 0%,
+      rgba(255, 255, 255, 0.030) 30%,
+      rgba(255, 255, 255, 0.012) 58%,
+      rgba(255, 255, 255, 0.038) 100%),
     var(--glass);
   border: 1px solid var(--brd);
   border-radius: var(--r-xl);
-  backdrop-filter: blur(var(--blur)) saturate(185%);
-  -webkit-backdrop-filter: blur(var(--blur)) saturate(185%);
+  /* 主体只用「模糊 + 饱和」。曾经把 SVG 折射滤镜也塞进这里，实测两件事都不划算：
+       ① 视觉上它把面板自己的边界也搅糊了（玻璃该有一条清晰的棱，糊掉就不像玻璃了）；
+       ② backdrop-filter 只要身后有东西在动就每帧重算，而 feTurbulence 是这串滤镜里最贵的一步。
+     折射改由下方 .glass::after 的「边缘折射环」独家承担 —— 那是普通 filter，
+     结果会被合成器缓存，只在首帧算一次。 */
+  backdrop-filter: blur(var(--blur)) saturate(var(--lg-sat)) brightness(var(--lg-lift));
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(var(--lg-sat));
   box-shadow:
-    0 34px 80px -30px rgba(0, 0, 0, 0.92),
-    inset 0 1px 0 rgba(255, 255, 255, 0.14),
-    inset 0 -36px 70px -46px rgba(129, 140, 248, 0.34),
-    0 0 0 1px rgba(255, 255, 255, 0.02);
+    /* 悬浮投影：两段式，近处收得紧、远处散得开 */
+    0 42px 92px -36px rgba(0, 0, 0, 0.95),
+    0 10px 30px -20px rgba(0, 0, 0, 0.8),
+    /* 玻璃厚度：上沿一条亮棱、下沿一条暗棱，左右收窄，物体会「立」起来 */
+    inset 0 1px 0 var(--edge),
+    inset 0 -1px 0 var(--edge-dim),
+    inset 1px 0 0 rgba(255, 255, 255, 0.10),
+    inset -1px 0 0 rgba(255, 255, 255, 0.05),
+    /* 边缘聚光：背后靛紫被玻璃「压」到四周的柔和回光 */
+    inset 0 0 74px -26px rgba(129, 140, 248, 0.28),
+    inset 0 -46px 76px -52px rgba(129, 140, 248, 0.4),
+    /* 极细的外描边，让边缘在深色背景上有轮廓 */
+    0 0 0 1px rgba(255, 255, 255, 0.025);
   overflow: hidden;
 }
 /* 顶部高光，强化玻璃质感 */
@@ -153,8 +215,81 @@ body {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), transparent 28%);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.075), transparent 24%);
   pointer-events: none;
+}
+
+/* 边缘折射环 —— 液态玻璃的招牌。
+   两件事叠在一起：
+     · 一圈「内描边」做出均匀的亮边（inset 阴影跟着 border-radius 走，宽度绝对均匀，
+       比用遮罩抠环稳得多 —— 遮罩方案在长方面板上左右带宽会明显比上下厚）；
+     · 一片低透明度的虹彩溢色，用遮罩只留在四周，模拟玻璃把背后的彩色光折到边缘。
+   最后整层过一遍 SVG 位移滤镜 + 轻微模糊：亮边被揉出波光，边缘看起来像真的「折了一次光」。 */
+.glass::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: conic-gradient(from 205deg at 50% 50%,
+    rgba(129, 140, 248, 0.60) 0deg,
+    rgba(34, 211, 238, 0.42) 72deg,
+    rgba(255, 255, 255, 0.22) 138deg,
+    rgba(192, 132, 252, 0.52) 212deg,
+    rgba(34, 211, 238, 0.36) 290deg,
+    rgba(129, 140, 248, 0.60) 360deg);
+  box-shadow: inset 0 0 0 1.6px rgba(255, 255, 255, 0.19);
+  opacity: 0.47;
+  filter: url(#lg-refract) blur(2.5px);
+  /* 遮罩停靠点必须卡在接近 100% 处：closest-side 的内切椭圆是「四条边都被碰到」的，
+     也就是 t=1 恰好对应面板四边。停在 88% 才是一条贴着边、约 40~70px 宽的窄环；
+     第一版写成 52% 时，彩色铺满了大半块面板 —— 那是整页发紫发灰的主因之一。 */
+  -webkit-mask: radial-gradient(closest-side, transparent 88%, #000 100%);
+  mask: radial-gradient(closest-side, transparent 88%, #000 100%);
+}
+/* 折射滤镜依赖的 SVG 定义在 index.html 里（宽高为 0，不占位、不可见） */
+.lg-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+
+/* 玻璃表面的三层装饰。做成独立占位元素（.lg-sheen）而不是复用 ::before/::after，
+   原因是 .glass 的两个伪元素已经分别被「顶部高光」和「边缘折射环」占用了。 */
+.lg-sheen {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 1;
+}
+/* ① 镜面高光：跟着指针走的一片柔光，指针停在哪儿，玻璃就在哪儿亮一下。
+   默认（触屏 / 未动指针 / reduced-motion）停在左上角，见 --mx / --my。 */
+.lg-sheen::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(340px 260px at var(--mx) var(--my),
+    rgba(255, 255, 255, 0.13),
+    rgba(255, 255, 255, 0.04) 42%,
+    transparent 74%);
+}
+/* ② 液态流动：三团很淡的光斑一起缓慢漂移，玻璃内部因此一直在「流」。
+   只有动 transform（可合成、不重绘）—— 改成动 background-position 的话，
+   每帧都要把整块面板重绘一遍，长面板上会明显掉帧。
+   透明度必须压在这个量级：再高一点就从「内部流光」变成整块发灰。 */
+.lg-sheen::after {
+  content: "";
+  position: absolute;
+  inset: -10%;
+  opacity: 0.45;
+  background:
+    radial-gradient(30% 17% at 14% 6%, rgba(129, 140, 248, 0.4), transparent 72%),
+    radial-gradient(26% 15% at 90% 16%, rgba(34, 211, 238, 0.3), transparent 72%),
+    radial-gradient(40% 22% at 74% 98%, rgba(192, 132, 252, 0.34), transparent 74%);
+  will-change: transform;
+  animation: lg-flow 30s var(--ease-soft) infinite alternate;
+}
+@keyframes lg-flow {
+  from { transform: translate3d(-3%, -2%, 0) scale(1); }
+  to   { transform: translate3d(4%, 3%, 0) scale(1.12); }
 }
 
 /* 屏幕入场：淡入 + 上浮 + 轻微聚焦 */
@@ -184,9 +319,14 @@ body {
   justify-content: center;
   gap: 9px;
   border: 1px solid var(--brd);
-  background: var(--glass-2);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background:
+    linear-gradient(168deg, rgba(255, 255, 255, 0.085) 0%, rgba(255, 255, 255, 0.018) 52%, rgba(255, 255, 255, 0.05) 100%),
+    var(--glass-2);
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.17),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.04);
   color: var(--text);
   font-family: inherit;
   font-size: 15px;
@@ -205,20 +345,30 @@ body {
 .btn:hover:not(:disabled) {
   transform: translateY(-2px);
   border-color: var(--brd-hi);
-  background: rgba(255, 255, 255, 0.07);
-  box-shadow: 0 14px 30px -14px rgba(0, 0, 0, 0.9);
+  background:
+    linear-gradient(168deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.04) 52%, rgba(255, 255, 255, 0.085) 100%),
+    rgba(255, 255, 255, 0.05);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.05),
+    0 16px 34px -14px rgba(0, 0, 0, 0.92);
 }
 .btn:active:not(:disabled) { transform: translateY(0) scale(0.985); transition-duration: 0.08s; }
 .btn:focus-visible { outline: 2px solid var(--a1); outline-offset: 3px; }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
-/* 主按钮：渐变 + 悬停扫光 + 呼吸光晕 */
+/* 主按钮：有色玻璃 —— 底色仍是品牌渐变，但压了一层镜面顶光与下沿厚度，
+   于是它看起来是「一块染了色的玻璃」而不是一块喷漆。 */
 .btn-primary {
-  border-color: transparent;
+  border-color: rgba(255, 255, 255, 0.3);
   color: #0a0b14;
   background: linear-gradient(120deg, var(--a1), var(--a2) 52%, var(--a3));
   background-size: 180% 100%;
-  box-shadow: 0 14px 34px -16px rgba(129, 140, 248, 0.9);
+  box-shadow:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.62),
+    inset 0 -12px 22px -14px rgba(0, 0, 0, 0.5),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.18),
+    0 16px 36px -16px rgba(129, 140, 248, 0.95);
   animation: hue-slide 9s var(--ease-soft) infinite alternate;
 }
 @keyframes hue-slide {
@@ -229,18 +379,22 @@ body {
   content: "";
   position: absolute; top: 0; left: -120%;
   width: 60%; height: 100%;
-  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.65), transparent);
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.7), transparent);
   transform: skewX(-18deg);
   transition: left 0.7s var(--ease-soft);
 }
 .btn-primary:hover:not(:disabled)::after { left: 130%; }
 .btn-primary:hover:not(:disabled) {
-  border-color: transparent;
+  border-color: rgba(255, 255, 255, 0.45);
   background-color: transparent;
-  box-shadow: 0 20px 44px -16px rgba(129, 140, 248, 1);
+  box-shadow:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.78),
+    inset 0 -12px 22px -14px rgba(0, 0, 0, 0.5),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.18),
+    0 22px 48px -16px rgba(129, 140, 248, 1);
 }
 
-.btn-lg { padding: 16px 34px; font-size: 16.5px; border-radius: 18px; }
+.btn-lg { padding: 16px 34px; font-size: 16.5px; border-radius: 22px; }
 .btn .ico { width: 20px; height: 20px; transition: transform 0.32s var(--ease); }
 .btn-lg:hover .ico { transform: translateX(4px); }
 
@@ -253,8 +407,8 @@ body {
 .hero::before {
   content: "";
   position: absolute; inset: -40% -10% auto;
-  height: 320px;
-  background: radial-gradient(closest-side, rgba(129, 140, 248, 0.22), transparent);
+  height: 300px;
+  background: radial-gradient(closest-side, rgba(129, 140, 248, 0.125), transparent);
   filter: blur(24px);
   animation: hue-breathe 8s var(--ease-soft) infinite alternate;
 }
@@ -593,7 +747,12 @@ body {
   padding: 15px 18px;
   border-radius: var(--r-md);
   border: 1px solid var(--brd);
-  background: var(--glass-3);
+  background:
+    linear-gradient(168deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.013) 48%, rgba(255, 255, 255, 0.032) 100%),
+    var(--glass-3);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.115),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.032);
   cursor: pointer;
   overflow: hidden;
   animation: rise 0.5s var(--ease) both;
@@ -616,23 +775,35 @@ body {
 .option:hover {
   transform: translateX(4px);
   border-color: var(--brd-hi);
-  background: rgba(255, 255, 255, 0.06);
-  box-shadow: 0 12px 26px -16px rgba(0, 0, 0, 0.9);
+  background:
+    linear-gradient(168deg, rgba(255, 255, 255, 0.09) 0%, rgba(255, 255, 255, 0.026) 48%, rgba(255, 255, 255, 0.06) 100%),
+    rgba(255, 255, 255, 0.035);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.19),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.04),
+    0 14px 28px -16px rgba(0, 0, 0, 0.92);
 }
 .option.selected {
-  border-color: rgba(129, 140, 248, 0.55);
-  background: linear-gradient(100deg, rgba(129, 140, 248, 0.16), rgba(192, 132, 252, 0.10));
-  box-shadow: 0 0 0 1px rgba(129, 140, 248, 0.22), 0 16px 34px -18px rgba(129, 140, 248, 0.9);
+  border-color: rgba(129, 140, 248, 0.6);
+  background:
+    linear-gradient(100deg, rgba(129, 140, 248, 0.22), rgba(192, 132, 252, 0.12)),
+    rgba(129, 140, 248, 0.06);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    inset 0 0 0 1px rgba(129, 140, 248, 0.24),
+    0 18px 38px -18px rgba(129, 140, 248, 0.95);
 }
 .option.selected::before { transform: scaleY(1); }
 
+/* 选项字母：做成一颗小玻璃珠，选中时点亮 */
 .dot {
   flex: none;
   width: 30px; height: 30px;
   display: grid; place-items: center;
   border-radius: 50%;
   border: 1px solid var(--brd);
-  background: var(--glass-2);
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.03));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24);
   font-size: 12.5px;
   font-weight: 800;
   color: var(--text-2);
@@ -640,10 +811,12 @@ body {
 }
 .option.selected .dot {
   background: linear-gradient(135deg, var(--a1), var(--a2));
-  border-color: transparent;
+  border-color: rgba(255, 255, 255, 0.4);
   color: #0a0b14;
   transform: scale(1.1);
-  box-shadow: 0 0 16px -2px rgba(129, 140, 248, 0.85);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    0 0 18px -2px rgba(129, 140, 248, 0.9);
 }
 .opt-label { font-size: 15px; line-height: 1.5; color: var(--text); }
 
@@ -1317,6 +1490,53 @@ body {
   to   { opacity: 1; transform: translate(-50%, 0) scale(1); }
 }
 
+/* ---------- 9.5 液态玻璃统一层 ----------
+   把内部那些「薄片」组件（面板、芯片、格子、维度行、逐题卡…）统一升级成小玻璃块：
+   斜向材质渐变 + 上沿受光棱 + 下沿暗棱。
+   放在文件后段是为了在这类组件各自的基础样式之后覆盖 box-shadow；带状态选择器的规则
+   （.option.selected / .resume-card[data-kind] / .token.warn 等）优先级更高，不会被误伤。 */
+.chip,
+.segmented,
+.q-type,
+.tile,
+.panel,
+.dim-row,
+.bd-list li,
+.owner-note,
+.resume-card,
+.stable-tag,
+.avg-delta,
+.token {
+  background-image: linear-gradient(168deg,
+    rgba(255, 255, 255, 0.055) 0%,
+    rgba(255, 255, 255, 0.012) 50%,
+    rgba(255, 255, 255, 0.032) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.11),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.03);
+}
+/* 面板是内容的主要容器，玻璃更厚一点、模糊更强一点 */
+.panel {
+  backdrop-filter: blur(16px) saturate(165%);
+  -webkit-backdrop-filter: blur(16px) saturate(165%);
+}
+
+/* 圆环（结果页 / 计算页）：底下垫一层玻璃凹槽，环才像嵌在玻璃里而不是浮着 */
+.ring-wrap,
+.calc-ring-wrap { border-radius: 50%; }
+.ring-wrap {
+  background: radial-gradient(closest-side, rgba(255, 255, 255, 0.04), transparent 72%);
+  box-shadow:
+    inset 0 0 34px -14px rgba(255, 255, 255, 0.13),
+    0 0 46px -20px rgba(129, 140, 248, 0.55);
+}
+.calc-ring-wrap {
+  background: radial-gradient(closest-side, rgba(129, 140, 248, 0.12), transparent 74%);
+  box-shadow:
+    inset 0 0 38px -14px rgba(255, 255, 255, 0.15),
+    0 0 64px -18px rgba(129, 140, 248, 0.6);
+}
+
 /* ---------- 10. 截长图时（html2canvas 不支持 backdrop-filter）---------- */
 .capturing {
   --glass: rgba(255, 255, 255, 0.085);
@@ -1331,6 +1551,11 @@ body {
 }
 .capturing, .capturing * { animation: none !important; transition: none !important; }
 .capturing .actions { display: none !important; }
+/* 新加的液态装饰层在导出时要收掉：html2canvas 画不出 backdrop-filter 之后的折射，
+   留着只会得到一圈糊掉的颜色，不如让面板回到「干净的厚玻璃」。 */
+.capturing .lg-sheen { display: none !important; }
+.capturing::after { display: none !important; }
+.capturing::before { filter: none !important; }
 
 /* ---------- 11. 响应式 ---------- */
 @media (max-width: 560px) {
@@ -1344,6 +1569,7 @@ body {
   .actions .btn { flex: 1 1 calc(50% - 6px); }
   .actions #restart-btn { flex: 1 1 100%; }
   .orb { filter: blur(64px); }
+  .bg::after { filter: blur(44px); }   /* 模糊半径直接决定每帧成本，手机上收一收 */
   .option { padding: 14px 15px; gap: 12px; }
   .opt-label { font-size: 14.5px; }
 }
@@ -1360,4 +1586,7 @@ body {
     transition-duration: 0.001ms !important;
   }
   .ring-fg { transition: none !important; }
+  /* 背景的极光与光带一旦停摆，backdrop-filter 也就没必要每帧重算了 ——
+     这既省电，也顺带让「减少动态效果」下的滚动更稳。 */
+  .bg::after, .lg-sheen::after { animation: none !important; }
 }
