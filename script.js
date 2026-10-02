@@ -1,8 +1,9 @@
 // script.js —— 前端逻辑（纯原生 JS，不含任何作者标准答案）
 // 关键安全约束：本文件不得出现 author_answer 或类似变量；答案只由后端计算。
 // 题型：单选（single，单字母）/ 多选（multiple，字母组合，如 'ABC'）。
-// 特性：选项含“其他”时可填入自定义文本；单选选中后自动跳题；
-//       结果页含多维雷达、维度剖析、深度报告、反作弊惩罚模式与结果长图导出。
+//       其中选项固定为「完全符合～完全不符合」的五级题，界面上单独标记为「符合度」。
+// 特性：单选选中后自动跳题；结果页含多维雷达、维度剖析、深度报告、
+//       反作弊惩罚模式与结果长图导出。
 
 // —— 等级/称号文案（与后端 levelKey 对应）；90+ 即为“可以跟作者配了” ——
 const TIERS = {
@@ -179,7 +180,6 @@ const state = {
   questions: [],    // 本轮抽取出的题目 [{ id, text, type, options: [...] }]
   targetPreset: DEFAULT_COUNT, // 开始页选择的「抽题量」档位（0 = 全部）
   answers: {},      // { [questionId]: 'A' | 'ABC' }
-  otherText: {},    // { [questionId]: '用户自定义文本' }
   current: 0,
   submitting: false,
   startTime: 0,     // 开始答题的时间戳（用于反作弊的时长判定）
@@ -264,9 +264,6 @@ function escapeHtml(str) {
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
   }[c]));
 }
-function escapeAttr(str) {
-  return escapeHtml(str).replace(/`/g, "&#96;");
-}
 function letterOf(index) {
   return String.fromCharCode(65 + index);
 }
@@ -275,6 +272,19 @@ function stripPrefix(label) {
 }
 function cleanLabel(label) {
   return stripPrefix(label).replace(/[_＿]+/g, "").trim();
+}
+
+// —— 五级符合度题识别 ——
+// 数据层仍存为 single（后端按「选项距离衰减」计分），前端依据选项内容识别，
+// 以便把题型标签显示成「符合度」而不是「单选」，并给出对应的作答提示。
+const SCALE_LABELS = ["完全符合", "比较符合", "一般", "比较不符合", "完全不符合"];
+function isScaleQuestion(q) {
+  if (!q || q.type !== "single") return false;
+  const opts = q.options || [];
+  return (
+    opts.length === SCALE_LABELS.length &&
+    opts.every((o, i) => cleanLabel(o) === SCALE_LABELS[i])
+  );
 }
 
 // —— 开始页玻璃芯片（用时 / 全网平均）——
@@ -448,7 +458,6 @@ async function startQuiz() {
     }
     sampleIntoState(); // 每轮重新随机抽（题量相近、顺序打乱）
     state.answers = {};
-    state.otherText = {};
     state.current = 0;
     state.result = null;
     state.startTime = Date.now(); // 计时开始（用于反作弊）
@@ -471,8 +480,13 @@ function renderQuestion() {
 
   questionText.textContent = q.text;
   replay(questionText, "q-in"); // 每次换题重放一次轻微的入场动效
-  qTypeBadge.textContent = q.type === "single" ? "单选" : "多选（可多选）";
-  qTypeBadge.className = "q-type " + (q.type === "single" ? "single" : "multiple");
+  const scale = isScaleQuestion(q);
+  qTypeBadge.textContent = scale
+    ? "符合度"
+    : q.type === "single"
+    ? "单选"
+    : "多选（可多选）";
+  qTypeBadge.className = "q-type " + (scale ? "scale" : q.type);
 
   const ratio = (state.current + 1) / total;
   progressFill.style.transform = `scaleX(${ratio})`; // 进度条用 scaleX 平滑拉伸
@@ -484,42 +498,14 @@ function renderQuestion() {
   optionsBox.innerHTML = "";
   q.options.forEach((label, idx) => {
     const letter = letterOf(idx);
-    const isOther = stripPrefix(label).includes("其他");
     const el = document.createElement("div");
-    el.className =
-      "option" +
-      (chosenSet.has(letter) ? " selected" : "") +
-      (isOther ? " option-other" : "");
+    el.className = "option" + (chosenSet.has(letter) ? " selected" : "");
     el.dataset.letter = letter;
     el.style.setProperty("--i", idx); // 选项错峰入场
-
-    const dot = `<span class="dot">${letter}</span>`;
-
-    if (isOther) {
-      const shown = cleanLabel(label) || "其他";
-      el.innerHTML =
-        `${dot}<span class="opt-label">${escapeHtml(shown)}</span>` +
-        `<input class="other-input" type="text" maxlength="30" ` +
-        `placeholder="这里写下你的答案…" value="${escapeAttr(state.otherText[q.id] || "")}">`;
-
-      const input = el.querySelector(".other-input");
-      input.addEventListener("click", (e) => e.stopPropagation());
-      input.addEventListener("focus", () => {
-        ensureSelected(q.id, letter, q.type);
-        refreshSelectionUI();
-      });
-      input.addEventListener("input", (e) => {
-        state.otherText[q.id] = e.target.value;
-        ensureSelected(q.id, letter, q.type);
-        refreshSelectionUI();
-      });
-      // 点“其他”这一行：选中它，但不自动跳题（要让用户先打字）
-      el.addEventListener("click", () => chooseOption(letter, q.type, true));
-    } else {
-      el.innerHTML = `${dot}<span class="opt-label">${escapeHtml(cleanLabel(label))}</span>`;
-      el.addEventListener("click", () => chooseOption(letter, q.type, false));
-    }
-
+    el.innerHTML =
+      `<span class="dot">${letter}</span>` +
+      `<span class="opt-label">${escapeHtml(cleanLabel(label))}</span>`;
+    el.addEventListener("click", () => chooseOption(letter, q.type));
     optionsBox.appendChild(el);
   });
 
@@ -538,18 +524,7 @@ function renderQuestion() {
   }
 }
 
-// 仅确保某选项被选中（不取消），用于“其他”输入
-function ensureSelected(id, letter, type) {
-  if (type === "single") {
-    state.answers[id] = letter;
-  } else {
-    const set = new Set(state.answers[id] ? state.answers[id].split("") : []);
-    set.add(letter);
-    state.answers[id] = [...set].sort().join("");
-  }
-}
-
-// 轻量刷新选中态与按钮可用性（不重建 DOM，保持输入框焦点）
+// 轻量刷新选中态与按钮可用性（不重建 DOM，避免每次点选都重放入场动画）
 function refreshSelectionUI() {
   const q = state.questions[state.current];
   const chosenStr = state.answers[q.id];
@@ -561,8 +536,8 @@ function refreshSelectionUI() {
 }
 
 // —— 点击某个选项 ——
-// 单选且非“其他”：选中后自动跳下一题（符合“单选不用按确定”的要求）
-function chooseOption(letter, type, isOther) {
+// 单选：选中后自动跳下一题（符合“单选不用按确定”的要求）
+function chooseOption(letter, type) {
   clearError();
   const q = state.questions[state.current];
   const id = q.id;
@@ -587,7 +562,7 @@ function chooseOption(letter, type, isOther) {
   refreshSelectionUI();
 
   const nowHas = (state.answers[id] || "").includes(letter);
-  if (type === "single" && !isOther && nowHas) {
+  if (type === "single" && nowHas) {
     scheduleAdvance(); // 单选选中即自动前进（当前题仅做选中反馈，翻页动画留给下一题）
   }
 }
@@ -645,19 +620,10 @@ async function submitAnswers() {
   nextBtn.disabled = true;
   nextBtn.textContent = "计算中…";
 
-  const answers = state.questions.map((q) => {
-    const ua = state.answers[q.id] || "";
-    const item = { questionId: q.id, userAnswer: ua };
-    const otherIdx = q.options.findIndex((o) => String(o).includes("其他"));
-    if (otherIdx >= 0) {
-      const otherLetter = letterOf(otherIdx);
-      if (ua.includes(otherLetter)) {
-        const t = (state.otherText[q.id] || "").trim();
-        if (t) item.userText = t;
-      }
-    }
-    return item;
-  });
+  const answers = state.questions.map((q) => ({
+    questionId: q.id,
+    userAnswer: state.answers[q.id] || "",
+  }));
 
   const durationMs = state.startTime ? Date.now() - state.startTime : 0;
 
@@ -924,17 +890,13 @@ function renderBreakdown(ul, items) {
 function fmtUserAnswer(detail) {
   const q = state.questions.find((x) => x.id === detail.questionId);
   if (!q || !detail.userAnswer) return "—";
-  const parts = detail.userAnswer.split("").map((ch) => {
-    const idx = ch.charCodeAt(0) - 65;
-    const label = q.options[idx] ? cleanLabel(q.options[idx]) : ch;
-    const isOther = String(q.options[idx] || "").includes("其他");
-    if (isOther) {
-      const t = detail.userText || "";
-      return t ? `其他：${t}` : "其他";
-    }
-    return label;
-  });
-  return parts.join(" / ");
+  return detail.userAnswer
+    .split("")
+    .map((ch) => {
+      const idx = ch.charCodeAt(0) - 65;
+      return q.options[idx] ? cleanLabel(q.options[idx]) : ch;
+    })
+    .join(" / ");
 }
 
 // —— 生成结果文案（复制用）——
@@ -1031,7 +993,6 @@ function restart() {
   startScreen.classList.remove("hidden");
   sampleIntoState(); // 重新抽样，开始页题量保持稳定（实际题集每轮不同）
   state.answers = {};
-  state.otherText = {};
   state.current = 0;
   state.result = null;
   loadGlobalStats(); // 刷新平均分（含刚才这一次提交）

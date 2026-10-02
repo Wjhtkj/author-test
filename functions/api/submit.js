@@ -1,7 +1,11 @@
 // functions/api/submit.js
 // POST /api/submit
-// 接收用户选项（大写字母组合，如 'A' 或 'ABC'；选了“其他”时可附带 userText），
-// 从 D1 读取作者答案（仅后端），按「单选完全匹配 / 多选 Jaccard 相似度」计算匹配度后返回结果。
+// 接收用户选项（大写字母组合，如 'A' 或 'ABC'），从 D1 读取作者答案（仅后端），
+// 按「选项距离衰减」计算每题得分与整体匹配度后返回结果。
+//
+// 计分模型（详见下方 scoreQuestion）：
+//   距离 = 选项字母序号之差的绝对值；作者选项距离 0 得 100，随后 70 / 45 / 25 / 10，更远为 5。
+//   单选：直接取距离对应分值；多选：软 Jaccard（按距离亲和度加权 ÷ 并集大小）。
 //
 // 安全要点：
 //  - 所有数据库查询均使用 prepare(...).bind(...) 参数化，杜绝 SQL 注入。
@@ -38,29 +42,57 @@ function isRateLimited(ip) {
   return rec.count > MAX_PER_WINDOW;
 }
 
-// 单题得分（0-100）
-//  单选：用户选项与作者完全一致得 100，否则 0（二值）。
-//  多选：用 Jaccard 相似度 = |交集| / |并集|，范围 0-100，部分重合给部分分。
-function scoreQuestion(type, userAnswer, authorAnswer) {
-  const authorSet = new Set(
-    (authorAnswer || "").split("").filter((c) => /[A-Z]/.test(c))
-  );
-  const userSet = new Set(
-    (userAnswer || "").split("").filter((c) => /[A-Z]/.test(c))
-  );
+// —— 单题得分（0-100）：按「选项距离衰减」给非标准选项赋分 ——
+//   · 单选：用户选项与作者选项的距离 d → 分值 DECAY[d]（100/70/45/25/10，更远 5）。
+//   · 多选：软 Jaccard 相似度 ——
+//       先给每个字母算出它相对「最近作者选项」的亲和度 a∈(0,1]（作者选项 a=1，其余按 DECAY/100），
+//       得分 = Σ a(用户所选项) ÷ |作者选项 ∪ 用户选项| × 100。
+//       完全命中作者组合 = 100；多选/错选较远的项会被并集与低亲和度共同稀释。
+const DECAY = [100, 70, 45, 25, 10]; // 距离 0,1,2,3,4
+const DECAY_FAR = 5;                  // 距离 ≥ 5
 
+function indexOfLetter(ch) {
+  return ch.charCodeAt(0) - 65; // 'A' -> 0
+}
+
+function lettersOf(str) {
+  return (str || "")
+    .split("")
+    .filter((c) => /[A-Z]/.test(c))
+    .map(indexOfLetter);
+}
+
+function decayAt(distance) {
+  return distance < DECAY.length ? DECAY[distance] : DECAY_FAR;
+}
+
+// 某选项相对作者答案集合的亲和度（0-1）
+function affinityOf(index, authorIndexes) {
+  let best = Infinity;
+  for (const j of authorIndexes) {
+    const d = Math.abs(index - j);
+    if (d < best) best = d;
+  }
+  if (!Number.isFinite(best)) return 0;
+  return best === 0 ? 1 : decayAt(best) / 100;
+}
+
+function scoreQuestion(type, userAnswer, authorAnswer) {
+  const authorIdx = lettersOf(authorAnswer);
+  const userIdx = lettersOf(userAnswer);
+  if (userIdx.length === 0 || authorIdx.length === 0) return 0;
+
+  // 单选：距离衰减
   if (type === "single") {
-    const u = [...userSet][0] || "";
-    const a = [...authorSet][0] || "";
-    return u === a ? 100 : 0;
+    return decayAt(Math.abs(userIdx[0] - authorIdx[0]));
   }
 
-  // 多选：Jaccard
-  if (userSet.size === 0 || authorSet.size === 0) return 0;
-  let inter = 0;
-  for (const x of userSet) if (authorSet.has(x)) inter++;
-  const union = new Set([...authorSet, ...userSet]).size;
-  return Math.round((inter / union) * 100);
+  // 多选：软 Jaccard
+  const union = new Set([...userIdx, ...authorIdx]).size;
+  if (union === 0) return 0;
+  let credit = 0;
+  for (const i of userIdx) credit += affinityOf(i, authorIdx);
+  return Math.max(0, Math.min(100, Math.round((credit / union) * 100)));
 }
 
 // 等级判定（含 90+ 的“可以跟作者配了”档）
