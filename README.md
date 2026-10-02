@@ -55,25 +55,29 @@
 
 ```
 matching-quiz/
-├── index.html              # 前端页面（开始 / 答题 / 结果 三个视图）
-├── styles.css              # 极简玻璃拟态样式 + 全套动效（无外部依赖）
-├── script.js               # 前端逻辑（无作者答案；单选自动跳题、符合度题徽标、多维雷达、维度剖析、深度报告、反作弊、长图导出、动效钩子）
-├── vendor/
-│   └── html2canvas.min.js  # 本地化的 html2canvas（用于“保存结果长图”，不外链 CDN）
-├── functions/
+├── public/                 # ★ 唯一会被发布上线的目录（pages_build_output_dir = "public"）
+│   ├── index.html          # 前端页面（开始 / 答题 / 结果 三个视图）
+│   ├── styles.css          # 极简玻璃拟态样式 + 全套动效（无外部依赖）
+│   ├── script.js           # 前端逻辑（无作者答案；单选自动跳题、符合度题徽标、多维雷达、维度剖析、深度报告、反作弊、长图导出、动效钩子）
+│   └── vendor/
+│       └── html2canvas.min.js  # 本地化的 html2canvas（用于“保存结果长图”，不外链 CDN）
+├── functions/              # Pages Functions（不发布为非静态文件，由平台编译执行）
 │   └── api/
 │       ├── questions.js    # GET  /api/questions  返回题目（id/text/type/options）
 │       ├── submit.js       # POST /api/submit    接收字母组合答案、计算分数、记录并统计平均分
 │       ├── stats.js        # GET  /api/stats     返回参与人次 / 全网平均分 / 最高分
 │       └── _middleware.js  # 可选：CORS / OPTIONS 预检
-├── migrations/
+├── migrations/             # 增量迁移（仅源码，不发布）
 │   ├── 001_submissions.sql       # 增量迁移：submissions 表（可对已有线上库安全重复执行）
 │   ├── 002_questions_38_58.sql   # 增量迁移：情景题 38-58（幂等 INSERT）
-│   └── 003_questions_likert.sql  # 增量迁移：题型改造（符合度题 + 移除「其他」，按 sort_order UPDATE）
+│   ├── 003_questions_likert.sql  # 增量迁移：题型改造（符合度题 + 移除「其他」，按 sort_order UPDATE）
+│   └── 004_questions_wording.sql # 增量迁移：题干改为「我更……而不是……」对照写法（幂等 UPDATE text）
 ├── schema.sql              # D1 建表 + 58 题初始数据（39 符合度题 / 14 多选题 / 5 常规单选，作者答案只在库里）
 ├── wrangler.toml           # Pages 配置 + D1 绑定
 └── README.md
 ```
+
+> ⚠️ **为什么要有 `public/`**：`schema.sql` 里写着全部 `author_answer`。只要源码目录被当成发布目录（`pages_build_output_dir = "."`），`https://<站点>/schema.sql` 就能被任何人直接下载，答案键当场泄露。把静态资源收进 `public/`、源码留在仓库根目录，是从结构上避免这类泄露——**别再往 `public/` 外面放需要发布的东西，也别把源码放进去**。
 
 ## 数据模型（D1）
 
@@ -146,8 +150,8 @@ cd matching-quiz
 # 初始化【本地】D1 数据库（执行 schema.sql 的建表与 58 题）
 npx wrangler d1 execute matching-quiz-db --local --file=./schema.sql
 
-# 启动本地开发服务器（Pages + Functions + 本地 D1）
-npx wrangler pages dev . --d1 DB=matching-quiz-db
+# 启动本地开发服务器（发布目录 public/ + Functions + 本地 D1）
+npx wrangler pages dev public --d1 DB=matching-quiz-db
 #   若想显式用 id：--d1 DB=你的database_id
 ```
 
@@ -163,7 +167,7 @@ npx wrangler pages dev . --d1 DB=matching-quiz-db
 ### 方式 A：连接 Git 仓库（推荐）
 1. 把 `matching-quiz/` 推到 GitHub 仓库。
 2. Cloudflare 控制台 → **Workers & Pages** → **创建** → **Pages** → 连接 Git 仓库。
-3. 构建设置：**Build command** 留空，**Build output directory** 填 `/`。
+3. 构建设置：**Build command** 留空，**Build output directory** 填 `public`。
 4. 部署完成后 → **Settings → Bindings → Add → D1 database**：Variable name 填 `DB`，选择 `matching-quiz-db`，保存后**重新部署**。
 5. 初始化远程数据库（二选一）：
    - 控制台 **D1** 页面 → 打开 `matching-quiz-db` → 粘贴 `schema.sql` 执行；
@@ -171,7 +175,7 @@ npx wrangler pages dev . --d1 DB=matching-quiz-db
 
 ### 方式 B：Wrangler 直接部署
 ```bash
-npx wrangler pages deploy . --branch main
+npx wrangler pages deploy public --branch main
 # 部署后仍需到控制台绑定 D1（Variable name = DB）并重新部署
 ```
 
@@ -231,6 +235,7 @@ npx wrangler pages deploy . --branch main
 ## 五、安全设计说明
 
 - **前端零答案**：`script.js` 中不存在任何 `author_answer` 或类似变量；标准答案只存在于 D1。
+- **源码不进发布目录**：发布目录是 `public/`（`pages_build_output_dir = "public"`），`schema.sql` / `migrations/` / `README.md` / `wrangler.toml` 都留在仓库根目录，**不会被当成静态文件公开下载**。此前用 `.` 当发布目录时，`/schema.sql` 是可以直接下载到全部 `author_answer` 的——已修正，改动后请顺手回归验证 `/schema.sql` 返回 404。
 - **GET /api/questions** 显式只 `SELECT id, text, type, options`，排除 `author_answer`。
 - **POST /api/submit** 读取 `author_answer` 后仅用于后端计算，**返回结果中不含作者答案**（只回传每题得分与你的选择）。
 - **防注入**：所有数据库查询均使用 `prepare(...).bind(...)` 参数化。
@@ -282,7 +287,7 @@ npx wrangler pages deploy . --branch main
 
 ## 八、部署实战踩坑备忘（Cloudflare Pages + D1）
 
-- **Build command 不能填 `npx wrangler deploy`**（那是 Workers 命令，会报 `Missing entry-point`）。控制台又不允许留空，可填 `echo "no build step"`；或干脆用命令行 `wrangler pages deploy .` 直推（本项目即采用此方式）。
+- **Build command 不能填 `npx wrangler deploy`**（那是 Workers 命令，会报 `Missing entry-point`）。控制台又不允许留空，可填 `echo "no build step"`；或干脆用命令行 `wrangler pages deploy public` 直推（本项目即采用此方式）。
 - **API Token 必须是通用 Token**（My Profile → API Tokens → Custom token，含 `Cloudflare Pages: Edit`、`D1: Edit`），**不是 R2/S3 凭证**（后者会报 `Invalid access token [9109]`）。
 - **首次部署若报 “The Pages project xxx does not exist”**：先 `npx wrangler pages project create <name> --production-branch=main`。
 - **灌数据到线上库必须加 `--remote`**：`npx wrangler d1 execute matching-quiz-db --remote --file=./schema.sql`；不加则只写进本地库 `.wrangler/state`，线上仍是空库。

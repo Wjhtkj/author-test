@@ -53,15 +53,15 @@ INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
 
 -- 3（符合度题）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
-('我最想用的手机品牌是小米。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 3);
+('我更喜欢小米，而不是华为或 OPPO。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 3);
 
 -- 4（符合度题）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
-('我平时最常喝的饮料是白开水。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 4);
+('我更喜欢白开水，而不是奶茶或咖啡。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 4);
 
 -- 5（符合度题）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
-('我最常用的社交平台是 QQ。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 5);
+('我更喜欢用 QQ，而不是微信。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 5);
 
 -- 6（多选，已移除「其他」）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
@@ -73,11 +73,11 @@ INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
 
 -- 8（符合度题）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
-('出门时我更愿意选择骑行。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 8);
+('出门时我更愿意骑车，而不是坐公交地铁。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 8);
 
 -- 9（符合度题）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
-('比起养宠物，我更倾向于不养。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 9);
+('我更倾向于不养宠物，而不是养猫养狗。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 9);
 
 -- 10（多选，已移除「其他」）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
@@ -85,7 +85,7 @@ INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
 
 -- 11（符合度题）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
-('我最喜欢的零食是辣条。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 11);
+('我更喜欢辣条，而不是薯片或巧克力。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 11);
 
 -- 12（多选，已移除「其他」）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
@@ -93,7 +93,7 @@ INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
 
 -- 13（符合度题）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
-('我手机常用的系统是 Android。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 13);
+('我更喜欢用 Android，而不是 iOS。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 13);
 
 -- 14（保留原选项）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
@@ -109,7 +109,7 @@ INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
 
 -- 17（符合度题）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
-('旅行时我更喜欢冒险型的玩法。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 17);
+('旅行时我更喜欢冒险，而不是城市观光。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 17);
 
 -- 18（保留原选项）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
@@ -117,7 +117,7 @@ INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
 
 -- 19（符合度题）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
-('我最喜欢的颜色是黑色。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 19);
+('我更喜欢黑色，而不是白色。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 19);
 
 -- 20（保留原选项）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
@@ -125,7 +125,7 @@ INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
 
 -- 21（符合度题）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
-('我常喝的咖啡是美式。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 21);
+('我更喜欢美式，而不是拿铁。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 21);
 
 -- 22（多选，已移除「其他」）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
@@ -133,7 +133,7 @@ INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
 
 -- 23（符合度题）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
-('我最喜欢的方便面口味是火鸡面。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 23);
+('我更喜欢火鸡面，而不是红烧牛肉面。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 23);
 
 -- 24（多选，已移除「其他」）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
@@ -141,27 +141,27 @@ INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
 
 -- 25（符合度题）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
-('我最喜欢的薯片口味是黄瓜味。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 25);
+('我更喜欢黄瓜味薯片，而不是原味薯片。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 25);
 
 -- 26（符合度题）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
-('我最常用的浏览器是 Edge。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 26);
+('我更喜欢用 Edge，而不是 Chrome。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 26);
 
 -- 27（符合度题）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
-('我更常用系统自带的输入法。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 27);
+('我更倾向于用系统自带输入法，而不是搜狗。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 27);
 
 -- 28（符合度题）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
-('充电时我更偏好有线快充。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 28);
+('充电时我更偏好有线快充，而不是无线充电。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 28);
 
 -- 29（符合度题）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
-('我更偏好入耳式耳机。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 29);
+('我更偏好入耳式耳机，而不是头戴式。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 29);
 
 -- 30（符合度题）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
-('我的电脑常用 Windows。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 30);
+('我的电脑更常用 Windows，而不是 macOS。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 30);
 
 -- 31（多选，已移除「其他」）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
@@ -177,7 +177,7 @@ INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
 
 -- 34（符合度题）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
-('我最常吃的早餐是包子配豆浆。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 34);
+('我更常拿包子豆浆当早餐，而不是面包牛奶。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 34);
 
 -- 35（多选，已移除「其他」）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
@@ -185,7 +185,7 @@ INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
 
 -- 36（符合度题）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
-('我习惯侧卧睡觉。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 36);
+('我更习惯侧卧睡觉，而不是仰卧。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 36);
 
 -- 37（保留原选项）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
@@ -197,7 +197,7 @@ INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
 
 -- 38（符合度题）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
-('周末朋友临时约我出门，我会立刻答应——出门玩更重要。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 38);
+('朋友临时约我出门，我更喜欢直接答应，而不是在家休息。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 38);
 
 -- 39（多选，已移除「其他」）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
@@ -205,76 +205,76 @@ INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
 
 -- 40（符合度题）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
-('朋友迟到 20 分钟，我会直接抱怨。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 40);
+('朋友迟到 20 分钟，我更喜欢直接抱怨，而不是憋着不说。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 40);
 
 -- 41（符合度题）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
-('群里发消息没人回，我会等别人主动。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 41);
+('群里发消息没人回，我更倾向于等别人主动，而不是追着问。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 41);
 
 -- 42（符合度题）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
-('朋友做了我不太认同的决定，我会尊重对方、不插嘴。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 42);
+('朋友做了我不认同的决定，我更倾向于尊重对方、不插嘴，而不是直接说教。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 42);
 
 -- 43（符合度题）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
-('团队合作时有人一直不干活，我会直接指出。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 43);
+('团队里有人一直不干活，我更倾向于直接指出，而不是自己默默多做。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 43);
 
 -- 44（符合度题）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
-('一个人旅行迷路时，我会打开地图自己找。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 44);
+('一个人旅行迷路了，我更倾向于打开地图自己找，而不是马上问人。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 44);
 
 -- 45（符合度题）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
-('买了又贵又不实用的东西后，我会去退货。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 45);
+('买了又贵又不实用的东西，我更倾向于去退货，而不是留着吃灰。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 45);
 
 -- 46（符合度题）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
-('赶 deadline 时朋友找我倾诉，我会说明情况、约晚点再聊。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 46);
+('赶 deadline 时朋友找我倾诉，我更倾向于说明情况、约晚点再聊，而不是放下手头的事。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 46);
 
 -- 47（符合度题）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
-('看到和我观点完全相反的评论，我会点踩但不评论。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 47);
+('看到和我完全相反的评论，我更倾向于点踩但不评论，而不是上去争。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 47);
 
 -- 48（符合度题）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
-('刚认识的人突然沉默时，我会玩手机缓解尴尬。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 48);
+('刚认识的人突然沉默，我更倾向于玩手机缓解尴尬，而不是硬找话题。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 48);
 
 -- 49（符合度题）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
-('收到不太喜欢的礼物，我会收下后放着。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 49);
+('收到不太喜欢的礼物，我更倾向于收下后放着，而不是当场说实话。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 49);
 
 -- 50（符合度题）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
-('在餐厅吃到很难吃的菜，我会和朋友吐槽。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 50);
+('在餐厅吃到很难吃的菜，我更倾向于和朋友吐槽，而不是叫服务员来反馈。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 50);
 
 -- 51（符合度题）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
-('发现自己的观点在小组里是少数时，我会先听别人说。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 51);
+('自己的观点在小组里是少数时，我更倾向于先听别人说，而不是立刻坚持己见。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 51);
 
 -- 52（符合度题）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
-('路上看到有人摔倒，我会打 120 或报警。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 52);
+('路上看到有人摔倒，我更倾向于打 120 或报警，而不是直接上前去扶。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 52);
 
 -- 53（符合度题）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
-('手机只剩 5% 电时，我会关掉所有后台省电。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 53);
+('手机只剩 5% 电又要很久才到家，我更倾向于关掉后台省电，而不是拿最后电量叫车。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 53);
 
 -- 54（符合度题）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
-('计划好的旅行突然下雨，我会待在酒店休息。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 54);
+('计划好的旅行突然下雨，我更倾向于待在酒店休息，而不是改成室内行程。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 54);
 
 -- 55（符合度题）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
-('朋友发了一条明显是炫耀的朋友圈，我会点赞。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 55);
+('朋友发明显是炫耀的朋友圈，我更倾向于直接点赞，而不是心里吐槽。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 55);
 
 -- 56（符合度题）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
-('被分配到不擅长的任务，我会跟负责人说明换人。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 56);
+('被分配到不擅长的任务，我更倾向于跟负责人说明换人，而不是硬着头皮做。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 56);
 
 -- 57（符合度题）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
-('公共场合有人外放很大声，我会忍一会儿。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 57);
+('公共场合有人外放很大声，我更倾向于忍一会儿，而不是上前提醒。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 57);
 
 -- 58（符合度题）
 INSERT INTO questions (text, type, options, author_answer, sort_order) VALUES
-('半夜突然想吃东西，我会点外卖。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 58);
+('半夜突然想吃东西，我更倾向于点外卖，而不是自己煮泡面。', 'single', '["A. 完全符合","B. 比较符合","C. 一般","D. 比较不符合","E. 完全不符合"]', 'A', 58);
