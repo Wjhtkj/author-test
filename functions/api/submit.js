@@ -10,6 +10,13 @@
 // 安全要点：
 //  - 所有数据库查询均使用 prepare(...).bind(...) 参数化，杜绝 SQL 注入。
 //  - author_answer 只在后端参与计算，绝不进入返回给前端的任何字段。
+//
+// 两个与「选项顺序」有关的约定（改动前务必读）：
+//  - 39 道符合度题里有 12 道是**反向题**（author_answer = 'E' 完全不符合，见 migrations/005），
+//    目的就是让「一路选完全符合」不再等于满分。随机乱选的期望分不受影响（仍是 37.6）。
+//  - 非量表题的选项**每次抽样都会随机换位**（前端负责），但提交上来的 userAnswer
+//    始终是「原序字母」，所以这里一行都不用改；只有反作弊的 straight-line 判定
+//    需要借用前端上报的 pick（显示位字母），见 detectCheat。
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -113,12 +120,15 @@ function tierOf(percent) {
 }
 
 // —— 反作弊：检出明显“没认真作答”的答题模式 ——
-//   1) straight-line：所有题目选了完全相同的答案（一路点同一个字母）
+//   1) straight-line：所有题目选了完全相同的答案
+//        · 前端对「非量表题」的选项做了随机换位，所以「一路点第一个」会产生一串各不相同的
+//          原序字母；因此用户实际点的「显示位」由前端额外上报在 pick 字段里，
+//          这里优先用 pick 判定（缺省时回退到 userAnswer，兼容老客户端）。
 //   2) too-fast：平均每题作答时间过短（疑似连点/脚本）
 // 返回命中的原因数组，空数组表示正常。
 function detectCheat(answers, durationMs, total) {
   const reasons = [];
-  const strs = answers.map((a) => a.userAnswer);
+  const strs = answers.map((a) => a.pick || a.userAnswer);
   if (new Set(strs).size === 1) reasons.push("straight-line");
   if (Number.isFinite(durationMs) && durationMs > 0 && durationMs / total < 400) {
     reasons.push("too-fast");
@@ -256,6 +266,10 @@ export async function onRequestPost({ request, env }) {
     // 用户自定义文本（仅“其他”选项会带）：只做长度与类型收敛，不参与计分
     if (a.userText != null && typeof a.userText !== "string") {
       return json({ error: `题目 ${q.id} 的自定义文本格式非法` }, 400);
+    }
+    // 显示位字母（前端换位后用户实际点在第几个位置）：仅用于反作弊判定，可选
+    if (a.pick != null && (typeof a.pick !== "string" || !/^[A-Z]*$/.test(a.pick))) {
+      return json({ error: `题目 ${q.id} 的 pick 字段格式非法` }, 400);
     }
   }
 

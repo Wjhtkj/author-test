@@ -14,3 +14,6 @@ _*.py
 _*.html
 _tmpcheck/
 _submissions_backup*.json
+# 从线上 D1 导出的题库快照（含 author_answer，只留在本机供 _subcheck.mjs 用；与 schema.sql 同级敏感）
+_bank.json
+_q.json

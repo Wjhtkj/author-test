@@ -467,9 +467,47 @@ async function loadBank() {
   }
 }
 
-// 从已载题库中为本轮抽取题目（每次开始/重开、切换档位都会重新随机抽）
+// —— 选项显示顺序：非量表题每次抽样都随机换位 ——
+//   为什么不全打乱：
+//     · 五级符合度题本身就是一套「完全符合 → 完全不符合」的刻度，乱序只会让人每题重新找一遍位置；
+//       而且想偷懒的人是「按文案找完全符合」，换位拦不住他 —— 拦住他的是那几道反向题（见 migrations/005）。
+//     · 其他题目换位后，「每次都点第一个」不再等于每次都选同一个东西，也顺带废掉
+//       「照着某份答案键的字母位置去点」这类玩法。
+//   关键：order 是「显示位 → 原序下标」的映射，state.answers 里存的**始终是原序字母**，
+//   所以提交、计分、结果页回显（fmtUserAnswer 用 options[idx]）全都不需要改口径。
+function shuffledOrder(q) {
+  return shuffle((q.options || []).map((_, i) => i));
+}
+// 取某题的显示顺序：非量表题带 order；量表题与老存档没有 order，按原序（恒等映射）
+function orderOf(q) {
+  const opts = (q && q.options) || [];
+  return Array.isArray(q.order) && q.order.length === opts.length
+    ? q.order
+    : opts.map((_, i) => i);
+}
+
+// 把「原序字母」换算成「显示位字母」（也就是用户实际点在了第几个位置）。
+// 只服务于反作弊：后端 detectCheat 的「所有题都选了同一个答案」原本看的是字母是否恒定，
+// 换位之后「一路点第一个」会产生一串各不相同的原序字母 —— 不换算的话这条判定就废了。
+function pickOf(q, userAnswer) {
+  const order = orderOf(q);
+  if (order.every((v, i) => v === i)) return userAnswer; // 没换位，位置即原序
+  return (userAnswer || "")
+    .split("")
+    .map((ch) => {
+      const pos = order.indexOf(ch.charCodeAt(0) - 65);
+      return pos >= 0 ? letterOf(pos) : ch;
+    })
+    .sort()
+    .join("");
+}
+
+// 从已载题库中为本轮抽取题目（每次开始/重开、切换档位都会重新随机抽 + 重新换位）
+// 注意要 {...q} 复制：order 是「这一轮」的显示顺序，不能写回 state.bank（否则题库被污染、续答也会串位）
 function sampleIntoState() {
-  state.questions = sampleByDimension(state.bank, resolveTargetCount(state.targetPreset));
+  state.questions = sampleByDimension(state.bank, resolveTargetCount(state.targetPreset)).map((q) =>
+    isScaleQuestion(q) ? { ...q } : { ...q, order: shuffledOrder(q) }
+  );
 }
 
 // —— 抽题量档位选择器 ——
@@ -779,15 +817,17 @@ function renderQuestion() {
   const chosenSet = new Set(chosenStr ? chosenStr.split("") : []);
 
   optionsBox.innerHTML = "";
-  q.options.forEach((label, idx) => {
-    const letter = letterOf(idx);
+  const order = orderOf(q); // 显示位 → 原序下标（非量表题已随机换位）
+  order.forEach((origIdx, pos) => {
+    const letter = letterOf(origIdx); // 记账、提交用的都是「原序字母」
+    const shown = letterOf(pos);      // 界面上印的是「当前显示位置」的字母
     const el = document.createElement("div");
     el.className = "option" + (chosenSet.has(letter) ? " selected" : "");
     el.dataset.letter = letter;
-    el.style.setProperty("--i", idx); // 选项错峰入场
+    el.style.setProperty("--i", pos); // 选项错峰入场（按显示顺序，而不是原序）
     el.innerHTML =
-      `<span class="dot">${letter}</span>` +
-      `<span class="opt-label">${escapeHtml(cleanLabel(label))}</span>`;
+      `<span class="dot">${shown}</span>` +
+      `<span class="opt-label">${escapeHtml(cleanLabel(q.options[origIdx]))}</span>`;
     el.addEventListener("click", () => chooseOption(letter, q.type));
     optionsBox.appendChild(el);
   });
@@ -1015,10 +1055,14 @@ async function submitAnswers() {
   // 结算最后一题的停留时长（前面每题都在「离开」时结算过了）
   recordTiming(state.questions[state.current].id);
 
-  const answers = state.questions.map((q) => ({
-    questionId: q.id,
-    userAnswer: state.answers[q.id] || "",
-  }));
+  const answers = state.questions.map((q) => {
+    const ua = state.answers[q.id] || "";
+    return {
+      questionId: q.id,
+      userAnswer: ua,        // 原序字母：后端按它与 author_answer 算分
+      pick: pickOf(q, ua),   // 显示位字母：仅后端反作弊用（判断有没有「一路点同一个位置」）
+    };
+  });
 
   const durationMs = state.startTime ? Date.now() - state.startTime : 0;
 
