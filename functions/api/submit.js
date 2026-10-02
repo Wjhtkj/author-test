@@ -4,7 +4,7 @@
 // 按「选项距离衰减」计算每题得分与整体匹配度后返回结果。
 //
 // 计分模型（详见下方 scoreQuestion）：
-//   距离 = 选项字母序号之差的绝对值；作者选项距离 0 得 100，随后 70 / 45 / 25 / 10，更远为 5。
+//   距离 = 选项字母序号之差的绝对值；作者选项距离 0 得 100，随后 55 / 25 / 8 / 0，更远为 0。
 //   单选：直接取距离对应分值；多选：软 Jaccard（按距离亲和度加权 ÷ 并集大小）。
 //
 // 安全要点：
@@ -43,13 +43,18 @@ function isRateLimited(ip) {
 }
 
 // —— 单题得分（0-100）：按「选项距离衰减」给非标准选项赋分 ——
-//   · 单选：用户选项与作者选项的距离 d → 分值 DECAY[d]（100/70/45/25/10，更远 5）。
+//   · 单选：用户选项与作者选项的距离 d → 分值 DECAY[d]（100/55/25/8/0，更远 0）。
 //   · 多选：软 Jaccard 相似度 ——
 //       先给每个字母算出它相对「最近作者选项」的亲和度 a∈(0,1]（作者选项 a=1，其余按 DECAY/100），
 //       得分 = Σ a(用户所选项) ÷ |作者选项 ∪ 用户选项| × 100。
 //       完全命中作者组合 = 100；多选/错选较远的项会被并集与低亲和度共同稀释。
-const DECAY = [100, 70, 45, 25, 10]; // 距离 0,1,2,3,4
-const DECAY_FAR = 5;                  // 距离 ≥ 5
+//
+// 标定说明：五级符合度题（选项完全符合～完全不符合）随机乱选的期望分
+//   = (100 + 55 + 25 + 8 + 0) / 5 = 37.6 分（旧表 100/70/45/25/10 的期望是 50 分）。
+//   也就是说“闭着眼乱点”只能拿到约 38 分，落在「平行宇宙来客」档，不会白送中等分数。
+//   想再陡/再缓，只改这张表即可（记得同步 README 的表格）。
+const DECAY = [100, 55, 25, 8, 0]; // 距离 0,1,2,3,4
+const DECAY_FAR = 0;               // 距离 ≥ 5
 
 function indexOfLetter(ch) {
   return ch.charCodeAt(0) - 65; // 'A' -> 0
@@ -95,13 +100,15 @@ function scoreQuestion(type, userAnswer, authorAnswer) {
   return Math.max(0, Math.min(100, Math.round((credit / union) * 100)));
 }
 
-// 等级判定（含 90+ 的“可以跟作者配了”档）
+// 等级判定（含 92+ 的“可以跟作者配了”档）
+// 阈值随 DECAY 一起上调：随机乱选的期望分已从 50 降到 37.6，
+// 若不抬高下沿（15→25 / 35→45），乱点也会落进「差异较大」档，称号就没有区分度了。
 function tierOf(percent) {
-  if (percent >= 90) return { level: "可以跟作者配了", levelKey: "soulmate" };
-  if (percent >= 75) return { level: "灵魂同频，你们很像", levelKey: "high" };
-  if (percent >= 55) return { level: "高度匹配，默契不错", levelKey: "medium" };
-  if (percent >= 35) return { level: "差异较大，但可能互补", levelKey: "low" };
-  if (percent >= 15) return { level: "平行宇宙来客", levelKey: "stranger" };
+  if (percent >= 92) return { level: "可以跟作者配了", levelKey: "soulmate" };
+  if (percent >= 78) return { level: "灵魂同频，你们很像", levelKey: "high" };
+  if (percent >= 62) return { level: "高度匹配，默契不错", levelKey: "medium" };
+  if (percent >= 45) return { level: "差异较大，但可能互补", levelKey: "low" };
+  if (percent >= 25) return { level: "平行宇宙来客", levelKey: "stranger" };
   return { level: "完全不同频，两个世界", levelKey: "none" };
 }
 

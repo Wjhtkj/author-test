@@ -195,17 +195,17 @@ npx wrangler pages deploy public --branch main
 响应（**绝不包含 `authorAnswer`**；`total` 为本次提交题量，`details` 为本次题目明细，供前端做维度分析）：
 ```json
 {
-  "rawScore": 1540,
-  "matchPercent": 77,
+  "rawScore": 1760,
+  "matchPercent": 88,
   "total": 20,
   "level": "灵魂同频，你们很像",
   "levelKey": "high",
   "cheated": false,
   "cheatReasons": [],
-  "stats": { "average": 62, "count": 148, "beatPercent": 71 },
+  "stats": { "average": 41, "count": 148, "beatPercent": 88 },
   "details": [
     { "questionId": 1, "text": "你喜欢喝什么可乐？", "type": "single", "userAnswer": "A", "score": 100 },
-    { "questionId": 3, "text": "我最想用的手机品牌是小米。", "type": "single", "userAnswer": "E", "score": 10 }
+    { "questionId": 3, "text": "我更喜欢的手机是小米，而不是华为或 OPPO。", "type": "single", "userAnswer": "E", "score": 0 }
   ]
 }
 ```
@@ -215,7 +215,7 @@ npx wrangler pages deploy public --branch main
 ### GET /api/stats
 返回全网聚合统计（仅用于展示，**不含任何个人答案**；命中反作弊的记录不计入）：
 ```json
-{ "count": 148, "average": 62, "best": 100 }
+{ "count": 148, "average": 41, "best": 100 }
 ```
 > `submissions` 表尚未迁移时返回 `{ "count": 0, "average": null, "best": null }`，前端会自动隐藏平均分模块，不影响正常测试。
 
@@ -229,6 +229,17 @@ npx wrangler pages deploy public --branch main
   ```bash
   npx wrangler d1 execute matching-quiz-db --remote --file=./migrations/001_submissions.sql
   ```
+
+> 🧹 **计分口径切换（2026-10-02）**：`DECAY` 由 `100/70/45/25/10` 调陡为 `100/55/25/8/0`、阈值由 `90/75/55/35/15` 上调为 `92/78/62/45/25` 时，`submissions` 里按旧口径产生的记录已整体清空（本地留了备份），**全网平均分从 0 人次重新累积**。
+>
+> 这是「一次性的运维动作」，没有被写进 `migrations/`——否则以后按顺序重跑迁移会把新累积的统计又抹掉。若将来再调 `DECAY`，请照做一次：
+> ```bash
+> # 1) 先备份
+> npx wrangler d1 execute matching-quiz-db --remote --command="SELECT * FROM submissions;" --json > submissions_backup.json
+> # 2) 再清空
+> npx wrangler d1 execute matching-quiz-db --remote --command="DELETE FROM submissions;" --yes
+> ```
+> 清空后 `/api/stats` 返回 `count: 0`，前端会自动显示「等你第一个」并隐藏平均分对比模块——这是预期行为，不是故障。
 
 > 前端的多维雷达、维度剖析、深度报告均由 `script.js` 依据 `details` 在本地聚合生成（维度分组定义在 `script.js` 的 `DIMENSIONS` 常量里，可自行调整）。
 
@@ -251,25 +262,25 @@ npx wrangler pages deploy public --branch main
 
 | 距离 | 0（就是作者选项） | 1 | 2 | 3 | 4 | ≥5 |
 |---|---|---|---|---|---|---|
-| 得分 | **100** | 70 | 45 | 25 | 10 | 5 |
+| 得分 | **100** | 55 | 25 | 8 | 0 | 0 |
 
 - **单选（`single`，含全部 39 道符合度题）**：直接取「用户选项 ↔ 作者选项」距离对应的分值。
-  例：作者选 A，你选 B → 70 分；选 C → 45；选 E → 10。
+  例：作者选 A，你选 B → 55 分；选 C → 25；选 D → 8；选 E → 0。
 - **多选（`multiple`）**：**软 Jaccard**——
   1. 先给每个字母算「亲和度」`a`：与最近作者选项的距离为 0 → `a = 1`，否则 `a = 衰减分 / 100`；
   2. `得分 = round( Σ a(你选的每一项) ÷ |作者选项 ∪ 你的选项| × 100 )`。
   完全命中作者组合 = 100；多选或错选离作者偏好很远的项，会被「并集变大」与「低亲和度」双重稀释。
 - 每题得分 0-100，**匹配度百分比 = 各题得分的平均值**（即 `matchPercent = round(Σ得分 / 题数)`）。
 - 原始分 `rawScore` = 各题得分之和（满分 `题数 × 100`）。
-- 等级（称号文案在 `script.js` 的 `TIERS` 里，可自由改）：
-  - 90-100：可以跟作者配了 💍（soulmate）
-  - 75-89：灵魂同频 🌟（high）
-  - 55-74：半同频选手 🤝（medium）
-  - 35-54：熟悉的陌生人 👀（low）
-  - 15-34：平行宇宙来客 🛸（stranger）
-  - 0-14：作者看了陷入沉默 🤐（none）
+- 等级（分界线定义在 `submit.js` 的 `tierOf()`，称号文案在 `script.js` 的 `TIERS` 里，可自由改）：
+  - 92-100：可以跟作者配了 💍（soulmate）
+  - 78-91：灵魂同频 🌟（high）
+  - 62-77：半同频选手 🤝（medium）
+  - 45-61：熟悉的陌生人 👀（low）
+  - 25-44：平行宇宙来客 🛸（stranger）
+  - 0-24：作者看了陷入沉默 🤐（none）
 
-> ⚠️ **分数整体上移的提醒**：改成距离衰减后，符合度题随机乱选的平均期望约为 50 分（`(100+70+45+25+10)/5`），而旧版单选是「不中即 0」。因此**全网平均分会明显高于以前，各档称号也更易达成**。若感觉分数虚高，改 `submit.js` 里的 `DECAY` 表（更陡）或调高 `tierOf()` 的阈值即可。
+> 📐 **标定口径**：五级符合度题「闭着眼乱点」的期望分 = `(100+55+25+8+0)/5 = **37.6**`，落在「平行宇宙来客」档；想要 92+ 基本得几乎条条命中。阈值（92/78/62/45/25）与 `DECAY` 是一起标定的——改其中一个就要回头核对另一个，否则会出现「乱点也能拿中等档」的失真。
 
 ## 七、维度分组（结果页分析用，共七维）
 

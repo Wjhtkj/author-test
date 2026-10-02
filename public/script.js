@@ -5,7 +5,8 @@
 // 特性：单选选中后自动跳题；结果页含多维雷达、维度剖析、深度报告、
 //       反作弊惩罚模式与结果长图导出。
 
-// —— 等级/称号文案（与后端 levelKey 对应）；90+ 即为“可以跟作者配了” ——
+// —— 等级/称号文案（与后端 levelKey 对应）；92+ 即为“可以跟作者配了” ——
+//   注意：各档分界线定义在 functions/api/submit.js 的 tierOf()，这里只放文案；改了那边记得同步注释。
 const TIERS = {
   soulmate: {
     title: "可以跟作者配了 💍",
@@ -387,7 +388,7 @@ function renderAvg(data) {
   else if (delta > -5) note = "和平均分咬得很紧，你就是那个“最标准的路人”。";
   else if (delta > -15) note = "略低于平均水平——不要紧，平均分也很平庸。";
   else note = "低于平均线，说明你很有自己的主见（也可能是没认真答）。";
-  if (mine >= 90) note = "90 分以上，你已超越绝大多数人，作者在线等你私信。";
+  if (mine >= 92) note = "92 分以上，你已超越绝大多数人，作者在线等你私信。";
   avgNote.textContent = note;
 }
 
@@ -655,16 +656,18 @@ function computeDimensions(details) {
     return { ...dim, percent, count: items.length };
   });
 }
+// 维度分档：与整体 tierOf() 一样随 DECAY 上调（随机乱选单题期望 37.6 分，
+// 故「半斤八两」下沿从 40 提到 45，避免乱点也被判成“半斤八两”）。
 function dimTag(p) {
   if (p >= 85) return "完全一致";
   if (p >= 70) return "高度同频";
-  if (p >= 40) return "半斤八两";
-  if (p >= 20) return "有点代沟";
+  if (p >= 45) return "半斤八两";
+  if (p >= 25) return "有点代沟";
   return "隔着一个次元";
 }
 function dimComment(dim, p) {
   if (p >= 70) return dim.hi;
-  if (p >= 40) return dim.mid;
+  if (p >= 45) return dim.mid;
   return dim.lo;
 }
 
